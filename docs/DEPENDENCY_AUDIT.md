@@ -41,8 +41,9 @@ Use local modules when the behavior is only meaningful inside ConvexAutoBackup, 
 
 Create a dedicated owned crate when the replacement is reusable across projects or likely to become a stable utility surface. Dedicated owned crates should have:
 
-- Their own source subtree in this repository so history and ownership stay isolated.
-- A package name under the `convex-autobackup-*` family unless the crate is intentionally general-purpose.
+- Their own git subtree so history and ownership stay isolated and the crate can be reused elsewhere.
+- A general-purpose package name when the crate is useful outside ConvexAutoBackup.
+- A `convex-autobackup-*` package name only when the crate is specifically useful to ConvexAutoBackup and belongs in the main ConvexAutoBackup repository.
 - A crate-level README, changelog entry, license metadata, docs, tests, and examples.
 - CI checks that can run the crate independently.
 - crates.io publishing through the release pipeline.
@@ -52,11 +53,11 @@ Candidate owned crates from this audit:
 
 | Candidate Crate | Replaces | Scope |
 | --- | --- | --- |
-| `convex-autobackup-paths` | `regex` for safe path/name validation | Backup-safe relative paths, safe object-key segments, path traversal rejection. |
-| `convex-autobackup-assets` | `mime_guess`, `rust-embed` | Generated static asset manifests and content type lookup for bundled web UIs. |
-| `convex-autobackup-errors` | `anyhow`, `thiserror` over time | Shared typed error helpers and manual error implementations for public APIs. |
-| `convex-autobackup-schedule` | `cron` if advanced cron is narrowed | Interval, daily, weekly, and project-owned cron subset evaluation. |
-| `convex-autobackup-cli` parser module or crate | `clap` later | Stable command grammar after the public CLI settles. |
+| Local module or `convex-autobackup-paths` | `regex` for safe path/name validation | ConvexAutoBackup backup-safe relative paths, safe object-key segments, path traversal rejection. Keep this in the main repo unless it becomes generally useful. |
+| General-purpose asset crate | `mime_guess`, `rust-embed` | Generated static asset manifests and content type lookup for bundled web UIs. Use a non-Convex package name if this is reusable. |
+| Local module or Convex-specific error crate | `anyhow`, `thiserror` over time | Shared typed error helpers and manual error implementations for ConvexAutoBackup public APIs. |
+| General-purpose schedule crate or local module | `cron` if advanced cron is narrowed | Interval, daily, weekly, and scoped cron-subset evaluation. Use a non-Convex package name if reusable. |
+| Local CLI parser module | `clap` later | Stable ConvexAutoBackup command grammar after the public CLI settles. |
 
 ## Direct Dependency LOC
 
