@@ -22,10 +22,24 @@ http://localhost:8976
 ## Docker Compose
 
 ```bash
+CONVEX_AUTOBACKUP_MASTER_KEY="$(openssl rand -base64 32)" \
 docker compose up --build
 ```
 
 The Compose file exposes port `8976` and persists `/data` in a named volume.
+It also starts a dedicated scheduler worker that polls persisted schedules every 30 seconds.
+
+Run a single scheduler pass manually:
+
+```bash
+convex-autobackup-worker --data-dir /data run-once --json
+```
+
+Run the scheduler loop directly:
+
+```bash
+convex-autobackup-worker --data-dir /data run --poll-seconds 30
+```
 
 ## Reverse Proxy
 
@@ -49,4 +63,3 @@ Operators should back up:
 - Configuration file.
 
 Losing the encrypted secret-store key can make encrypted destination credentials or encrypted backup archives unrecoverable.
-

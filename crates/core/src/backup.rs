@@ -3,7 +3,7 @@ use crate::db::AppDatabase;
 use crate::manifest::{BackupManifest, ManifestInput};
 use crate::models::{ConvexTarget, JobStatus};
 use crate::secrets::SecretVault;
-use crate::storage::store_backup;
+use crate::storage::{prune_local_retention, store_backup};
 use anyhow::Context;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -96,6 +96,11 @@ impl BackupEngine {
                 Some(stored.manifest_path.to_string_lossy().to_string()),
                 Some(manifest_json),
                 None,
+            )?;
+            let _ = prune_local_retention(
+                &bundle.destination,
+                &bundle.project.name,
+                &bundle.target.deployment,
             )?;
             Ok::<_, anyhow::Error>((stored.storage_uri, stored.manifest_path))
         }

@@ -69,6 +69,17 @@ pub struct RunRecord {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AuditEvent {
+    pub id: Uuid,
+    pub actor: String,
+    pub action: String,
+    pub resource_type: String,
+    pub resource_id: Option<Uuid>,
+    pub message: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CreateJobSchedule {
     pub job_id: Uuid,
     pub schedule: Schedule,
@@ -209,6 +220,16 @@ impl AppDatabase {
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS audit_events (
+                id TEXT PRIMARY KEY,
+                actor TEXT NOT NULL,
+                action TEXT NOT NULL,
+                resource_type TEXT NOT NULL,
+                resource_id TEXT,
+                message TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
             "#,
         )?;
 
@@ -259,6 +280,13 @@ impl AppDatabase {
                 project.description,
                 project.created_at.to_rfc3339()
             ],
+        )?;
+        self.record_audit(
+            "system",
+            "project.create",
+            "project",
+            Some(project.id),
+            &format!("created project {}", project.name),
         )?;
         Ok(project)
     }
@@ -325,6 +353,13 @@ impl AppDatabase {
                 target.secret.label
             ],
         )?;
+        self.record_audit(
+            "system",
+            "target.create",
+            "target",
+            Some(target.id),
+            &format!("created target {} for {}", target.name, target.deployment),
+        )?;
         Ok(target)
     }
 
@@ -354,6 +389,13 @@ impl AppDatabase {
                 serde_json::to_string(&destination.encryption)?,
                 serde_json::to_string(&destination.retention)?,
             ],
+        )?;
+        self.record_audit(
+            "system",
+            "destination.create",
+            "destination",
+            Some(destination.id),
+            &format!("created local destination {}", destination.name),
         )?;
         Ok(destination)
     }
@@ -395,6 +437,13 @@ impl AppDatabase {
                 serde_json::to_string(&destination.retention)?,
             ],
         )?;
+        self.record_audit(
+            "system",
+            "destination.create",
+            "destination",
+            Some(destination.id),
+            &format!("created S3-compatible destination {}", destination.name),
+        )?;
         Ok(destination)
     }
 
@@ -425,6 +474,13 @@ impl AppDatabase {
                 job.include_file_storage,
                 job.schedule_enabled
             ],
+        )?;
+        self.record_audit(
+            "system",
+            "job.create",
+            "job",
+            Some(job.id),
+            &format!("created backup job {}", job.name),
         )?;
         Ok(job)
     }
@@ -516,6 +572,13 @@ impl AppDatabase {
                 now.to_rfc3339()
             ],
         )?;
+        self.record_audit(
+            "system",
+            "schedule.create",
+            "schedule",
+            Some(schedule.id),
+            &format!("created schedule for job {}", schedule.job_id),
+        )?;
         Ok(schedule)
     }
 
@@ -577,6 +640,13 @@ impl AppDatabase {
                 run.started_at.to_rfc3339(),
             ],
         )?;
+        self.record_audit(
+            "system",
+            "backup.run.start",
+            "run",
+            Some(run.id),
+            &format!("started backup run for job {}", run.job_id),
+        )?;
         Ok(run)
     }
 
@@ -602,7 +672,68 @@ impl AppDatabase {
                 run_id.to_string(),
             ],
         )?;
+        self.record_audit(
+            "system",
+            match status {
+                JobStatus::Succeeded => "backup.run.succeeded",
+                JobStatus::Failed => "backup.run.failed",
+                JobStatus::Canceled => "backup.run.canceled",
+                JobStatus::Partial => "backup.run.partial",
+                JobStatus::Queued => "backup.run.queued",
+                JobStatus::Running => "backup.run.running",
+            },
+            "run",
+            Some(run_id),
+            error.as_deref().unwrap_or("backup run finished"),
+        )?;
         Ok(())
+    }
+
+    pub fn record_audit(
+        &self,
+        actor: &str,
+        action: &str,
+        resource_type: &str,
+        resource_id: Option<Uuid>,
+        message: &str,
+    ) -> anyhow::Result<AuditEvent> {
+        require_non_empty("audit actor", actor)?;
+        require_non_empty("audit action", action)?;
+        require_non_empty("audit resource type", resource_type)?;
+        let event = AuditEvent {
+            id: Uuid::now_v7(),
+            actor: actor.to_string(),
+            action: action.to_string(),
+            resource_type: resource_type.to_string(),
+            resource_id,
+            message: message.to_string(),
+            created_at: Utc::now(),
+        };
+        let connection = self.connection()?;
+        connection.execute(
+            "INSERT INTO audit_events (id, actor, action, resource_type, resource_id, message, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                event.id.to_string(),
+                event.actor,
+                event.action,
+                event.resource_type,
+                event.resource_id.map(|id| id.to_string()),
+                event.message,
+                event.created_at.to_rfc3339()
+            ],
+        )?;
+        Ok(event)
+    }
+
+    pub fn list_audit_events(&self, limit: u32) -> anyhow::Result<Vec<AuditEvent>> {
+        let connection = self.connection()?;
+        let mut statement = connection.prepare(
+            "SELECT id, actor, action, resource_type, resource_id, message, created_at
+             FROM audit_events ORDER BY created_at DESC LIMIT ?1",
+        )?;
+        let rows = statement.query_map(params![limit], audit_from_row)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
     fn get_job(&self, job_id: Uuid) -> anyhow::Result<BackupJob> {
@@ -756,6 +887,21 @@ fn schedule_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<DueJobSchedule
     })
 }
 
+fn audit_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AuditEvent> {
+    Ok(AuditEvent {
+        id: parse_uuid(row.get::<_, String>(0)?)?,
+        actor: row.get(1)?,
+        action: row.get(2)?,
+        resource_type: row.get(3)?,
+        resource_id: row
+            .get::<_, Option<String>>(4)?
+            .map(parse_uuid)
+            .transpose()?,
+        message: row.get(5)?,
+        created_at: parse_datetime(row.get::<_, String>(6)?)?,
+    })
+}
+
 fn parse_uuid(value: String) -> rusqlite::Result<Uuid> {
     Uuid::parse_str(&value).map_err(|error| {
         rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, error.into())
@@ -860,6 +1006,12 @@ mod tests {
         assert_eq!(bundle.target.secret.label, "CONVEX_DEPLOY_KEY_CLIENT_A");
         assert!(bundle.job.include_file_storage);
         assert_eq!(db.list_projects().unwrap().len(), 1);
+        assert!(
+            db.list_audit_events(20)
+                .unwrap()
+                .iter()
+                .any(|event| event.action == "job.create")
+        );
     }
 
     #[test]

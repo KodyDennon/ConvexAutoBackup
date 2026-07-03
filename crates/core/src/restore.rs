@@ -63,6 +63,13 @@ impl RestoreEngine {
                 &archive_path,
             )
             .await?;
+        self.database.record_audit(
+            "system",
+            "restore.completed",
+            "run",
+            Some(run_id),
+            &format!("restored backup to {}", target.deployment),
+        )?;
         Ok(RestoreResult {
             run_id,
             target_id,

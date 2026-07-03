@@ -15,6 +15,7 @@ The product supports:
 - Role-based permissions for owners, admins, operators, and viewers.
 
 Initial owner creation is a first-run bootstrap action. After bootstrap, owner creation requires an authorized owner.
+The HTTP bootstrap endpoint returns a one-time API token with the first owner so headless installs can continue setup without browser sessions.
 
 ## Authorization
 
@@ -62,7 +63,8 @@ Audit entries record:
 - Backup, verification, restore, and report actions.
 - Destructive restore confirmations.
 
+The current implementation persists audit events for user creation, token creation, secret storage, project/target/destination/job/schedule creation, backup run start and completion, and restore completion.
+
 ## Agent Safety
 
 MCP and API token access default to safe read and non-destructive action scopes. Destructive restore is disabled for MCP by default and must remain separately gated.
-

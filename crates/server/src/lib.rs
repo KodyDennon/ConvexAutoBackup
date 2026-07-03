@@ -76,6 +76,7 @@ pub fn router_with_state(state: AppState) -> Router {
         .route("/api/v1/runs/{run_id}/verify", post(verify_backup_run))
         .route("/api/v1/restore", post(restore_backup_run))
         .route("/api/v1/dr/report", get(dr_report))
+        .route("/api/v1/audit", get(list_audit_events))
         .route("/api/v1/jobs/{job_id}/run", post(run_job))
         .route("/api/v1/runs", get(list_runs))
         .layer(CorsLayer::permissive())
@@ -134,6 +135,7 @@ async fn openapi_spec() -> Json<serde_json::Value> {
             "/api/v1/runs/{run_id}/verify": {"post": {"summary": "Verify backup run"}},
             "/api/v1/restore": {"post": {"summary": "Restore verified backup run"}},
             "/api/v1/dr/report": {"get": {"summary": "Generate DR evidence report"}},
+            "/api/v1/audit": {"get": {"summary": "List audit events"}},
             "/api/v1/jobs/{job_id}/run": {"post": {"summary": "Run backup job"}},
             "/api/v1/runs": {"get": {"summary": "List backup runs"}}
         }
@@ -165,7 +167,11 @@ async fn bootstrap_owner(
         role: Role::Owner,
         ..input
     })?;
-    Ok(Json(serde_json::json!({ "user": user })))
+    let api_token = auth.create_api_token(user.id, "bootstrap")?;
+    Ok(Json(serde_json::json!({
+        "user": user,
+        "api_token": api_token
+    })))
 }
 
 #[derive(Debug, Deserialize)]
@@ -386,6 +392,16 @@ async fn dr_report(
     })))
 }
 
+async fn list_audit_events(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_role(&state, &headers, RoleRequirement::Manage)?;
+    Ok(Json(serde_json::json!({
+        "audit_events": state.database.list_audit_events(100)?
+    })))
+}
+
 #[derive(Debug, Clone, Copy)]
 enum RoleRequirement {
     Authenticated,
@@ -486,7 +502,7 @@ fn default_data_dir() -> PathBuf {
 mod tests {
     use super::*;
     use axum::body::Body;
-    use axum::http::{Request, StatusCode};
+    use axum::http::{Request, StatusCode, header};
     use tower::ServiceExt;
 
     fn test_router() -> Router {
@@ -528,5 +544,90 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn bootstrap_token_and_project_api_flow() {
+        let app = test_router();
+        let bootstrap_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/bootstrap")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "email": "owner@example.com",
+                            "password": "very-secure-password",
+                            "role": "viewer"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(bootstrap_response.status(), StatusCode::OK);
+        let bootstrap_body = axum::body::to_bytes(bootstrap_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let bootstrap_json: serde_json::Value = serde_json::from_slice(&bootstrap_body).unwrap();
+        let user_id = bootstrap_json["user"]["id"].as_str().unwrap();
+        let token = bootstrap_json["api_token"]["token"].as_str().unwrap();
+
+        let token_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/tokens")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "user_id": user_id,
+                            "name": "api-test"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(token_response.status(), StatusCode::OK);
+
+        let create_project_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/projects")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "name": "API Project",
+                            "description": "created in integration test"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(create_project_response.status(), StatusCode::OK);
+
+        let list_projects_response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/projects")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(list_projects_response.status(), StatusCode::OK);
     }
 }

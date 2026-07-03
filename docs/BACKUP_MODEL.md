@@ -72,7 +72,7 @@ Retention supports:
 - Keep weekly backups.
 - Keep monthly backups.
 
-Retention deletes only backups that have a valid manifest and are not protected by a DR drill or explicit hold.
+Local retention currently enforces `keep_last` after successful backup completion. It deletes older archive/manifest pairs from the local destination directory.
 
 ## Verification
 

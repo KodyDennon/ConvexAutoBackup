@@ -28,6 +28,9 @@ This repository starts with the production-grade project skeleton:
 - Backup engine that resolves encrypted deploy-key secrets or env references, runs the Convex export command, writes local archives atomically or uploads S3-compatible objects, writes manifests, and records success/failure runs.
 - Guarded restore engine that verifies the backup and requires exact deployment confirmation before invoking Convex import.
 - DR evidence report generation from persisted run history.
+- Audit log records for users, tokens, secrets, projects, targets, destinations, jobs, schedules, backup runs, and restore operations.
+- Local retention pruning by `keep_last`.
+- Dedicated scheduler worker process for persisted schedules.
 - Tested auth, encrypted secrets, scheduling, manifest, path-safety, local storage, SQLite, backup, verification, restore, server health/auth, and worker policy logic.
 - React web app shell served by the Rust service.
 - Dockerfile, Compose file, CI, Dependabot, Makefile, editor config, and environment example.
@@ -53,6 +56,7 @@ The default bind is `0.0.0.0:8976` so LAN access works in server installs. Norma
 
 ```bash
 convex-autobackup init --json
+convex-autobackup user create --email owner@example.com --password '<12+ chars>' --role owner --json
 convex-autobackup project create --name "Client App" --json
 convex-autobackup destination create-local --name "Local Vault" --root ./backups --json
 CONVEX_AUTOBACKUP_MASTER_KEY=<master> convex-autobackup secret put \
@@ -81,14 +85,17 @@ CONVEX_AUTOBACKUP_MASTER_KEY=<master> convex-autobackup restore \
   --json
 convex-autobackup runs --json
 convex-autobackup dr-report --json
+convex-autobackup audit --json
 ```
 
 Deploy keys can be stored as encrypted secrets. Environment-variable references remain supported for local automation.
 
+The HTTP bootstrap endpoint creates the first owner and returns a one-time bootstrap API token so headless setups can continue configuration through the API.
+
 ## Docker
 
 ```bash
-docker compose up --build
+CONVEX_AUTOBACKUP_MASTER_KEY="$(openssl rand -base64 32)" docker compose up --build
 ```
 
 The service listens on:

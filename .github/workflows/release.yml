@@ -1,0 +1,42 @@
+name: Release Build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  native:
+    name: Native ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install web dependencies
+        run: npm --prefix web ci
+      - name: Build web UI
+        run: npm --prefix web run build
+      - name: Build binaries
+        run: cargo build --release --workspace
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: convex-autobackup-${{ matrix.os }}
+          path: |
+            target/release/convex-autobackup*
+            target/release/convex-autobackup-server*
+            target/release/convex-autobackup-worker*
+            target/release/convex-autobackup-mcp*

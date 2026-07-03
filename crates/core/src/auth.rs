@@ -87,6 +87,13 @@ impl AuthService {
                 user.created_at.to_rfc3339()
             ],
         )?;
+        self.database.record_audit(
+            "system",
+            "user.create",
+            "user",
+            Some(user.id),
+            &format!("created user {}", user.email),
+        )?;
         Ok(user)
     }
 
@@ -142,6 +149,13 @@ impl AuthService {
                 token_hash,
                 token.created_at.to_rfc3339()
             ],
+        )?;
+        self.database.record_audit(
+            "system",
+            "token.create",
+            "api_token",
+            Some(token.id),
+            &format!("created API token {}", token.name),
         )?;
         Ok(token)
     }

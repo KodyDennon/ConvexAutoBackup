@@ -103,6 +103,13 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Inspect audit events.
+    Audit {
+        #[arg(long, default_value_t = 100)]
+        limit: u32,
+        #[arg(long)]
+        json: bool,
+    },
     /// Inspect run history.
     Runs(JsonArg),
 }
@@ -543,6 +550,13 @@ async fn main() -> anyhow::Result<()> {
             print_output(
                 json,
                 &serde_json::json!({ "dr_report": generate_dr_report(&database)? }),
+            )?;
+        }
+        Command::Audit { limit, json } => {
+            let database = AppDatabase::open(&database_path)?;
+            print_output(
+                json,
+                &serde_json::json!({ "audit_events": database.list_audit_events(limit)? }),
             )?;
         }
         Command::Runs(args) => {

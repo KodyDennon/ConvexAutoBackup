@@ -30,6 +30,8 @@ convex-autobackup
 - `backup`: trigger backup runs.
 - `verify`: verify backup archives and manifests.
 - `restore`: restore a verified backup to a confirmed target deployment.
+- `dr-report`: generate disaster recovery evidence from run history.
+- `audit`: inspect audit events.
 - `runs`: inspect run history.
 
 ## Future Command Groups

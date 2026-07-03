@@ -20,8 +20,8 @@ pub use convex::{
     ImportRequest,
 };
 pub use db::{
-    AppDatabase, CreateCloudTarget, CreateLocalDestination, CreateProject, CreateS3Destination,
-    CreateScheduledJob, JobBundle, RunRecord,
+    AppDatabase, AuditEvent, CreateCloudTarget, CreateLocalDestination, CreateProject,
+    CreateS3Destination, CreateScheduledJob, JobBundle, RunRecord,
 };
 pub use dr::{DrReadiness, DrReport, generate_dr_report};
 pub use manifest::{BackupManifest, ManifestInput};

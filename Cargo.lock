@@ -510,9 +510,12 @@ dependencies = [
  "anyhow",
  "clap",
  "convex-autobackup-core",
+ "dirs",
  "serde",
  "serde_json",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 

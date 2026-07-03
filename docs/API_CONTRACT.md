@@ -27,11 +27,15 @@ The HTTP API is versioned under:
 - `POST /api/v1/jobs/{job_id}/run`
 - `POST /api/v1/runs/{run_id}/verify`
 - `POST /api/v1/restore`
+- `GET /api/v1/dr/report`
+- `GET /api/v1/audit`
 - `GET /api/v1/runs`
 
 ## Future Resource Groups
 
-Browser sessions, scoped token permissions, DR reports, audit, logs, settings, and Postgres administration are roadmap resource groups.
+Browser sessions, scoped token permissions, logs, settings, and Postgres administration are roadmap resource groups.
+
+`POST /api/v1/bootstrap` is available only before any user exists. It creates the first owner and returns a one-time bootstrap API token.
 
 ## Rules
 

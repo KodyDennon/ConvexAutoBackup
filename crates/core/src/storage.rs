@@ -19,6 +19,12 @@ pub struct StoredBackup {
     pub storage_uri: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RetentionPruneResult {
+    pub deleted_archives: usize,
+    pub deleted_manifests: usize,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct S3CredentialSecret {
     pub access_key_id: String,
@@ -107,6 +113,75 @@ pub fn store_local_backup(
         archive_path,
         manifest_path,
     })
+}
+
+pub fn prune_local_retention(
+    destination: &StorageDestination,
+    project_name: &str,
+    deployment: &str,
+) -> anyhow::Result<RetentionPruneResult> {
+    let StorageKind::LocalFilesystem { root } = &destination.kind else {
+        return Ok(RetentionPruneResult {
+            deleted_archives: 0,
+            deleted_manifests: 0,
+        });
+    };
+    let Some(keep_last) = destination.retention.keep_last else {
+        return Ok(RetentionPruneResult {
+            deleted_archives: 0,
+            deleted_manifests: 0,
+        });
+    };
+    let backup_dir = Path::new(root)
+        .join(safe_segment(project_name))
+        .join(safe_segment(deployment));
+    if !backup_dir.exists() {
+        return Ok(RetentionPruneResult {
+            deleted_archives: 0,
+            deleted_manifests: 0,
+        });
+    }
+
+    let mut manifests = std::fs::read_dir(&backup_dir)?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.ends_with(".zip.manifest.json"))
+        })
+        .collect::<Vec<_>>();
+    manifests.sort();
+    let keep_last = keep_last as usize;
+    if manifests.len() <= keep_last {
+        return Ok(RetentionPruneResult {
+            deleted_archives: 0,
+            deleted_manifests: 0,
+        });
+    }
+
+    let delete_count = manifests.len() - keep_last;
+    let mut result = RetentionPruneResult {
+        deleted_archives: 0,
+        deleted_manifests: 0,
+    };
+    for manifest_path in manifests.into_iter().take(delete_count) {
+        let archive_name = manifest_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .and_then(|name| name.strip_suffix(".manifest.json"))
+            .ok_or_else(|| anyhow!("invalid manifest file name {}", manifest_path.display()))?;
+        let archive_path = manifest_path.with_file_name(archive_name);
+        if archive_path.exists() {
+            std::fs::remove_file(&archive_path)
+                .with_context(|| format!("failed to delete {}", archive_path.display()))?;
+            result.deleted_archives += 1;
+        }
+        std::fs::remove_file(&manifest_path)
+            .with_context(|| format!("failed to delete {}", manifest_path.display()))?;
+        result.deleted_manifests += 1;
+    }
+    Ok(result)
 }
 
 pub async fn store_s3_backup(
@@ -289,6 +364,44 @@ mod tests {
             std::fs::read_to_string(&stored.manifest_path)
                 .unwrap()
                 .contains("careful-otter")
+        );
+    }
+
+    #[test]
+    fn local_retention_prunes_old_archive_manifest_pairs() {
+        let dir = tempfile::tempdir().unwrap();
+        let destination = StorageDestination {
+            id: Uuid::now_v7(),
+            team_id: Uuid::now_v7(),
+            name: "Local".to_string(),
+            kind: StorageKind::LocalFilesystem {
+                root: dir.path().to_string_lossy().to_string(),
+            },
+            encryption: EncryptionMode::Disabled,
+            retention: RetentionPolicy {
+                keep_last: Some(2),
+                keep_days: None,
+                keep_weeklies: None,
+                keep_monthlies: None,
+            },
+        };
+        let backup_dir = dir.path().join("Project").join("prod");
+        std::fs::create_dir_all(&backup_dir).unwrap();
+        for index in 0..4 {
+            let archive = backup_dir.join(format!("2026070{index}T000000Z-run.zip"));
+            let manifest = backup_dir.join(format!("2026070{index}T000000Z-run.zip.manifest.json"));
+            std::fs::write(archive, b"zip").unwrap();
+            std::fs::write(manifest, b"{}").unwrap();
+        }
+
+        let result = prune_local_retention(&destination, "Project", "prod").unwrap();
+
+        assert_eq!(result.deleted_archives, 2);
+        assert_eq!(result.deleted_manifests, 2);
+        assert_eq!(
+            std::fs::read_dir(backup_dir).unwrap().count(),
+            4,
+            "two archive/manifest pairs should remain"
         );
     }
 }

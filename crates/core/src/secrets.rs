@@ -91,6 +91,13 @@ impl SecretVault {
                 stored.updated_at.to_rfc3339()
             ],
         )?;
+        self.database.record_audit(
+            "system",
+            "secret.put",
+            "secret",
+            Some(stored.id),
+            &format!("stored encrypted secret {}", stored.label),
+        )?;
         Ok(stored)
     }
 

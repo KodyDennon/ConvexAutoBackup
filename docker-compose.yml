@@ -6,10 +6,21 @@ services:
       - "8976:8976"
     environment:
       CONVEX_AUTOBACKUP_BIND: 0.0.0.0:8976
+      CONVEX_AUTOBACKUP_MASTER_KEY: ${CONVEX_AUTOBACKUP_MASTER_KEY:?set CONVEX_AUTOBACKUP_MASTER_KEY}
+      RUST_LOG: info
+    volumes:
+      - convex-autobackup-data:/data
+
+  convex-autobackup-worker:
+    image: convex-autobackup:local
+    depends_on:
+      - convex-autobackup
+    command: ["convex-autobackup-worker", "--data-dir", "/data", "run", "--poll-seconds", "30"]
+    environment:
+      CONVEX_AUTOBACKUP_MASTER_KEY: ${CONVEX_AUTOBACKUP_MASTER_KEY:?set CONVEX_AUTOBACKUP_MASTER_KEY}
       RUST_LOG: info
     volumes:
       - convex-autobackup-data:/data
 
 volumes:
   convex-autobackup-data:
-
