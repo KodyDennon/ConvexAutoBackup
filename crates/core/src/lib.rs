@@ -17,14 +17,15 @@ pub mod verify;
 pub use auth::{ApiToken, ApiTokenMetadata, AuthService, CreateUser, Role, User};
 pub use backup::{BackupEngine, BackupRunResult};
 pub use convex::{
-    CommandConvexExporter, CommandConvexImporter, ConvexExporter, ConvexImporter, ExportRequest,
-    ImportRequest,
+    CommandConvexExporter, CommandConvexImporter, ConvexExporter, ConvexImporter, ConvexIoFuture,
+    ExportRequest, ImportRequest,
 };
 pub use db::{
     AppDatabase, AuditEvent, CreateCloudTarget, CreateLocalDestination, CreateProject,
     CreateS3Destination, CreateScheduledJob, JobBundle, RunRecord,
 };
 pub use dr::{DrReadiness, DrReport, generate_dr_report};
+pub use firstparty_error::{Error, Result, ResultContext, error};
 pub use manifest::{BackupManifest, ManifestInput};
 pub use models::{
     BackupJob, BackupRun, ConvexTarget, ConvexTargetKind, EncryptionMode, JobStatus, Project,

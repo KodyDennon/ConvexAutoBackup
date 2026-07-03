@@ -1,8 +1,11 @@
 use crate::{ConvexTarget, ConvexTargetKind, managed_convex_bin};
-use anyhow::{Context, anyhow};
-use async_trait::async_trait;
+use crate::{Result, ResultContext, error};
+use std::future::Future;
 use std::path::Path;
+use std::pin::Pin;
 use tokio::process::Command;
+
+pub type ConvexIoFuture<'a> = Pin<Box<dyn Future<Output = Result<String>> + Send + 'a>>;
 
 #[derive(Debug, Clone)]
 pub struct ExportRequest {
@@ -17,22 +20,20 @@ pub struct ImportRequest {
     pub deploy_key: String,
 }
 
-#[async_trait]
 pub trait ConvexExporter: Send + Sync {
-    async fn export_to_path(
-        &self,
+    fn export_to_path<'a>(
+        &'a self,
         request: ExportRequest,
-        output_path: &Path,
-    ) -> anyhow::Result<String>;
+        output_path: &'a Path,
+    ) -> ConvexIoFuture<'a>;
 }
 
-#[async_trait]
 pub trait ConvexImporter: Send + Sync {
-    async fn import_from_path(
-        &self,
+    fn import_from_path<'a>(
+        &'a self,
         request: ImportRequest,
-        archive_path: &Path,
-    ) -> anyhow::Result<String>;
+        archive_path: &'a Path,
+    ) -> ConvexIoFuture<'a>;
 }
 
 #[derive(Debug, Clone)]
@@ -165,65 +166,67 @@ impl CommandConvexImporter {
     }
 }
 
-#[async_trait]
 impl ConvexExporter for CommandConvexExporter {
-    async fn export_to_path(
-        &self,
+    fn export_to_path<'a>(
+        &'a self,
         request: ExportRequest,
-        output_path: &Path,
-    ) -> anyhow::Result<String> {
-        let args = Self::command_args(&request, output_path);
-        let mut command = Command::new(&self.program);
-        command.args(&self.prefix_args);
-        command.args(&args);
-        command.env("CONVEX_DEPLOY_KEY", &request.deploy_key);
+        output_path: &'a Path,
+    ) -> ConvexIoFuture<'a> {
+        Box::pin(async move {
+            let args = Self::command_args(&request, output_path);
+            let mut command = Command::new(&self.program);
+            command.args(&self.prefix_args);
+            command.args(&args);
+            command.env("CONVEX_DEPLOY_KEY", &request.deploy_key);
 
-        let output = command
-            .output()
-            .await
-            .with_context(|| format!("failed to execute {}", self.program))?;
-        if !output.status.success() {
-            return Err(anyhow!(
-                "convex export failed with status {}: {}",
-                output.status,
-                String::from_utf8_lossy(&output.stderr)
-            ));
-        }
+            let output = command
+                .output()
+                .await
+                .with_context(|| format!("failed to execute {}", self.program))?;
+            if !output.status.success() {
+                return Err(error!(
+                    "convex export failed with status {}: {}",
+                    output.status,
+                    String::from_utf8_lossy(&output.stderr)
+                ));
+            }
 
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+            Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        })
     }
 }
 
-#[async_trait]
 impl ConvexImporter for CommandConvexImporter {
-    async fn import_from_path(
-        &self,
+    fn import_from_path<'a>(
+        &'a self,
         request: ImportRequest,
-        archive_path: &Path,
-    ) -> anyhow::Result<String> {
-        let args = Self::command_args(&request, archive_path);
-        let mut command = Command::new(&self.program);
-        command.args(&self.prefix_args);
-        command.args(&args);
-        command.env("CONVEX_DEPLOY_KEY", &request.deploy_key);
+        archive_path: &'a Path,
+    ) -> ConvexIoFuture<'a> {
+        Box::pin(async move {
+            let args = Self::command_args(&request, archive_path);
+            let mut command = Command::new(&self.program);
+            command.args(&self.prefix_args);
+            command.args(&args);
+            command.env("CONVEX_DEPLOY_KEY", &request.deploy_key);
 
-        let output = command
-            .output()
-            .await
-            .with_context(|| format!("failed to execute {}", self.program))?;
-        if !output.status.success() {
-            return Err(anyhow!(
-                "convex import failed with status {}: {}",
-                output.status,
-                String::from_utf8_lossy(&output.stderr)
-            ));
-        }
+            let output = command
+                .output()
+                .await
+                .with_context(|| format!("failed to execute {}", self.program))?;
+            if !output.status.success() {
+                return Err(error!(
+                    "convex import failed with status {}: {}",
+                    output.status,
+                    String::from_utf8_lossy(&output.stderr)
+                ));
+            }
 
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+            Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        })
     }
 }
 
-pub fn resolve_deploy_key(target: &ConvexTarget) -> anyhow::Result<String> {
+pub fn resolve_deploy_key(target: &ConvexTarget) -> Result<String> {
     std::env::var(&target.secret.label).with_context(|| {
         format!(
             "deploy key environment variable {} is not set",

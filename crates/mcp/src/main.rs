@@ -1,3 +1,4 @@
+use firstparty_error::Result as AppResult;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::io::{self, BufRead, Write};
@@ -26,7 +27,7 @@ struct JsonRpcError {
     message: String,
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() -> AppResult<()> {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
 

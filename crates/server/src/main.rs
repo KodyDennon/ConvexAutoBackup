@@ -1,12 +1,18 @@
-use anyhow::Context;
+use convex_autobackup_core::{Error, Result, ResultContext};
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tracing_subscriber::{EnvFilter, fmt};
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<()> {
     fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive("info".parse()?))
+        .with_env_filter(
+            EnvFilter::from_default_env().add_directive(
+                "info".parse().map_err(|error| {
+                    Error::with_source("default log directive is invalid", error)
+                })?,
+            ),
+        )
         .init();
 
     let addr: SocketAddr = std::env::var("CONVEX_AUTOBACKUP_BIND")

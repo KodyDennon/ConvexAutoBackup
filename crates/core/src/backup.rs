@@ -4,7 +4,7 @@ use crate::manifest::{BackupManifest, ManifestInput};
 use crate::models::{ConvexTarget, JobStatus};
 use crate::secrets::SecretVault;
 use crate::storage::{prune_local_retention, store_backup};
-use anyhow::Context;
+use crate::{Error, Result, ResultContext};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -38,7 +38,7 @@ impl BackupEngine {
         &self,
         job_id: Uuid,
         exporter: &dyn ConvexExporter,
-    ) -> anyhow::Result<BackupRunResult> {
+    ) -> Result<BackupRunResult> {
         std::fs::create_dir_all(&self.staging_dir).with_context(|| {
             format!(
                 "failed to create staging dir {}",
@@ -102,7 +102,7 @@ impl BackupEngine {
                 &bundle.project.name,
                 &bundle.target.deployment,
             )?;
-            Ok::<_, anyhow::Error>((stored.storage_uri, stored.manifest_path))
+            Ok::<_, Error>((stored.storage_uri, stored.manifest_path))
         }
         .await;
 
@@ -139,10 +139,7 @@ impl BackupEngine {
     }
 }
 
-fn resolve_deploy_key_from_store(
-    database: &AppDatabase,
-    target: &ConvexTarget,
-) -> anyhow::Result<String> {
+fn resolve_deploy_key_from_store(database: &AppDatabase, target: &ConvexTarget) -> Result<String> {
     SecretVault::from_env(database.clone())?.get_secret(target.secret.id)
 }
 
@@ -150,23 +147,23 @@ fn resolve_deploy_key_from_store(
 mod tests {
     use super::*;
     use crate::{
-        CreateCloudTarget, CreateLocalDestination, CreateProject, CreateScheduledJob,
-        RetentionPolicy,
+        ConvexIoFuture, CreateCloudTarget, CreateLocalDestination, CreateProject,
+        CreateScheduledJob, RetentionPolicy,
     };
-    use async_trait::async_trait;
     use std::path::Path;
 
     struct FixtureExporter;
 
-    #[async_trait]
     impl ConvexExporter for FixtureExporter {
-        async fn export_to_path(
-            &self,
+        fn export_to_path<'a>(
+            &'a self,
             _request: ExportRequest,
-            output_path: &Path,
-        ) -> anyhow::Result<String> {
-            tokio::fs::write(output_path, b"fixture convex export").await?;
-            Ok("fixture export complete".to_string())
+            output_path: &'a Path,
+        ) -> ConvexIoFuture<'a> {
+            Box::pin(async move {
+                tokio::fs::write(output_path, b"fixture convex export").await?;
+                Ok("fixture export complete".to_string())
+            })
         }
     }
 

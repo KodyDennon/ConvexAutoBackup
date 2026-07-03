@@ -12,10 +12,10 @@ use axum::{
 use convex_autobackup_core::{
     AppDatabase, AuthService, BackupEngine, CommandConvexExporter, CommandConvexImporter,
     CreateCloudTarget, CreateJobSchedule, CreateLocalDestination, CreateProject,
-    CreateS3Destination, CreateScheduledJob, CreateUser, RestoreEngine, Role, SchedulerService,
-    SecretKind, SecretVault, User, generate_dr_report, list_secret_metadata, verify_run,
+    CreateS3Destination, CreateScheduledJob, CreateUser, Error, RestoreEngine, Result as AppResult,
+    Role, SchedulerService, SecretKind, SecretVault, User, default_data_dir, generate_dr_report,
+    list_secret_metadata, verify_run,
 };
-use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::Arc};
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
@@ -23,9 +23,7 @@ use uuid::Uuid;
 
 use metadata::{capabilities, openapi_spec};
 
-#[derive(RustEmbed)]
-#[folder = "web-dist"]
-struct WebAssets;
+include!(concat!(env!("OUT_DIR"), "/web_assets.rs"));
 
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -36,7 +34,7 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn open_default() -> anyhow::Result<Self> {
+    pub fn open_default() -> AppResult<Self> {
         let data_dir = default_data_dir();
         Ok(Self {
             version: env!("CARGO_PKG_VERSION"),
@@ -56,7 +54,7 @@ pub struct HealthResponse {
     pub users_configured: bool,
 }
 
-pub fn router() -> anyhow::Result<Router> {
+pub fn router() -> AppResult<Router> {
     Ok(router_with_state(AppState::open_default()?))
 }
 
@@ -112,14 +110,30 @@ async fn static_asset(Path(path): Path<String>) -> Response {
 }
 
 fn embedded_asset(path: &str) -> Option<Response> {
-    WebAssets::get(path).map(|asset| {
-        let mime = mime_guess::from_path(path).first_or_octet_stream();
-        (
-            [(header::CONTENT_TYPE, mime.as_ref())],
-            asset.data.into_owned(),
-        )
-            .into_response()
-    })
+    WEB_ASSETS
+        .iter()
+        .find(|asset| asset.path == path)
+        .map(|asset| {
+            (
+                [(header::CONTENT_TYPE, content_type_for_path(path))],
+                asset.bytes,
+            )
+                .into_response()
+        })
+}
+
+fn content_type_for_path(path: &str) -> &'static str {
+    match path.rsplit_once('.').map(|(_, extension)| extension) {
+        Some("html") => "text/html; charset=utf-8",
+        Some("css") => "text/css; charset=utf-8",
+        Some("js") => "text/javascript; charset=utf-8",
+        Some("json") => "application/json",
+        Some("svg") => "image/svg+xml",
+        Some("ico") => "image/x-icon",
+        Some("wasm") => "application/wasm",
+        Some("txt") => "text/plain; charset=utf-8",
+        _ => "application/octet-stream",
+    }
 }
 
 async fn health(State(state): State<Arc<AppState>>) -> Result<Json<HealthResponse>, ApiError> {
@@ -538,12 +552,9 @@ impl ApiError {
     }
 }
 
-impl<E> From<E> for ApiError
-where
-    E: Into<anyhow::Error>,
-{
-    fn from(error: E) -> Self {
-        Self::bad_request(error.into().to_string())
+impl From<Error> for ApiError {
+    fn from(error: Error) -> Self {
+        Self::bad_request(error.to_string())
     }
 }
 
@@ -557,14 +568,4 @@ impl IntoResponse for ApiError {
         )
             .into_response()
     }
-}
-
-fn default_data_dir() -> PathBuf {
-    std::env::var("CONVEX_AUTOBACKUP_DATA_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            dirs::data_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join("convex-autobackup")
-        })
 }

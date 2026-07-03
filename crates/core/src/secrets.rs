@@ -1,9 +1,9 @@
 use crate::db::AppDatabase;
+use crate::{Result, ResultContext, error};
 use aes_gcm::{
     Aes256Gcm,
     aead::{Aead, KeyInit, Nonce},
 };
-use anyhow::{Context, anyhow};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::{DateTime, Utc};
 use rusqlite::{OptionalExtension, params};
@@ -36,7 +36,7 @@ pub struct SecretVault {
 }
 
 impl SecretVault {
-    pub fn from_env(database: AppDatabase) -> anyhow::Result<Self> {
+    pub fn from_env(database: AppDatabase) -> Result<Self> {
         let key = std::env::var("CONVEX_AUTOBACKUP_MASTER_KEY")
             .context("CONVEX_AUTOBACKUP_MASTER_KEY is required for encrypted secrets")?;
         Ok(Self::with_master_key(database, &key))
@@ -54,23 +54,23 @@ impl SecretVault {
         label: &str,
         kind: SecretKind,
         plaintext: &str,
-    ) -> anyhow::Result<StoredSecret> {
+    ) -> Result<StoredSecret> {
         if label.trim().is_empty() {
-            return Err(anyhow!("secret label is required"));
+            return Err(error!("secret label is required"));
         }
         if plaintext.is_empty() {
-            return Err(anyhow!("secret value is required"));
+            return Err(error!("secret value is required"));
         }
         let mut nonce_bytes = [0_u8; 12];
         getrandom::fill(&mut nonce_bytes)
-            .map_err(|error| anyhow!("failed to generate secret nonce: {error}"))?;
+            .map_err(|error| error!("failed to generate secret nonce: {error}"))?;
         let nonce = Nonce::<Aes256Gcm>::try_from(&nonce_bytes[..])
-            .map_err(|_| anyhow!("failed to construct secret nonce"))?;
+            .map_err(|_| error!("failed to construct secret nonce"))?;
         let cipher = Aes256Gcm::new_from_slice(&self.key)
-            .map_err(|error| anyhow!("failed to initialize secret cipher: {error}"))?;
+            .map_err(|error| error!("failed to initialize secret cipher: {error}"))?;
         let ciphertext = cipher
             .encrypt(&nonce, plaintext.as_bytes())
-            .map_err(|error| anyhow!("failed to encrypt secret: {error}"))?;
+            .map_err(|error| error!("failed to encrypt secret: {error}"))?;
         let now = Utc::now();
         let stored = StoredSecret {
             id: Uuid::now_v7(),
@@ -103,7 +103,7 @@ impl SecretVault {
         Ok(stored)
     }
 
-    pub fn get_secret(&self, id: Uuid) -> anyhow::Result<String> {
+    pub fn get_secret(&self, id: Uuid) -> Result<String> {
         let connection = self.database.connection()?;
         let row = connection
             .query_row(
@@ -112,7 +112,7 @@ impl SecretVault {
                 |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
             )
             .optional()?
-            .ok_or_else(|| anyhow!("secret {id} does not exist"))?;
+            .ok_or_else(|| error!("secret {id} does not exist"))?;
         let nonce = STANDARD
             .decode(row.0)
             .context("stored secret nonce is not base64")?;
@@ -120,21 +120,21 @@ impl SecretVault {
             .decode(row.1)
             .context("stored secret ciphertext is not base64")?;
         let nonce = Nonce::<Aes256Gcm>::try_from(nonce.as_slice())
-            .map_err(|_| anyhow!("stored secret nonce has invalid length"))?;
+            .map_err(|_| error!("stored secret nonce has invalid length"))?;
         let cipher = Aes256Gcm::new_from_slice(&self.key)
-            .map_err(|error| anyhow!("failed to initialize secret cipher: {error}"))?;
+            .map_err(|error| error!("failed to initialize secret cipher: {error}"))?;
         let plaintext = cipher
             .decrypt(&nonce, ciphertext.as_ref())
-            .map_err(|error| anyhow!("failed to decrypt secret: {error}"))?;
+            .map_err(|error| error!("failed to decrypt secret: {error}"))?;
         String::from_utf8(plaintext).context("stored secret is not valid UTF-8")
     }
 
-    pub fn list_secrets(&self) -> anyhow::Result<Vec<StoredSecret>> {
+    pub fn list_secrets(&self) -> Result<Vec<StoredSecret>> {
         list_secret_metadata(&self.database)
     }
 }
 
-pub fn list_secret_metadata(database: &AppDatabase) -> anyhow::Result<Vec<StoredSecret>> {
+pub fn list_secret_metadata(database: &AppDatabase) -> Result<Vec<StoredSecret>> {
     let connection = database.connection()?;
     let mut statement = connection.prepare(
         "SELECT id, label, kind, created_at, updated_at FROM secrets ORDER BY created_at ASC",
@@ -176,7 +176,7 @@ pub fn list_secret_metadata(database: &AppDatabase) -> anyhow::Result<Vec<Stored
                 .with_timezone(&Utc),
         })
     })?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
 }
 
 fn kind_to_str(kind: &SecretKind) -> &'static str {
@@ -188,13 +188,13 @@ fn kind_to_str(kind: &SecretKind) -> &'static str {
     }
 }
 
-fn kind_from_str(value: &str) -> anyhow::Result<SecretKind> {
+fn kind_from_str(value: &str) -> Result<SecretKind> {
     match value {
         "convex_deploy_key" => Ok(SecretKind::ConvexDeployKey),
         "s3_credentials" => Ok(SecretKind::S3Credentials),
         "webhook_token" => Ok(SecretKind::WebhookToken),
         "encryption_key" => Ok(SecretKind::EncryptionKey),
-        other => Err(anyhow!("unknown secret kind {other}")),
+        other => Err(error!("unknown secret kind {other}")),
     }
 }
 

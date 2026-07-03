@@ -1,15 +1,33 @@
-use regex::Regex;
+use std::fmt;
 use std::path::{Component, Path, PathBuf};
-use thiserror::Error;
 
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum PathSafetyError {
-    #[error("backup path must be relative")]
     AbsolutePath,
-    #[error("backup path may not contain parent directory components")]
     ParentDirectory,
-    #[error("backup file name contains unsupported characters")]
     UnsafeName,
+}
+
+impl fmt::Display for PathSafetyError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::AbsolutePath => formatter.write_str("backup path must be relative"),
+            Self::ParentDirectory => {
+                formatter.write_str("backup path may not contain parent directory components")
+            }
+            Self::UnsafeName => {
+                formatter.write_str("backup file name contains unsupported characters")
+            }
+        }
+    }
+}
+
+impl std::error::Error for PathSafetyError {}
+
+impl From<PathSafetyError> for crate::Error {
+    fn from(error: PathSafetyError) -> Self {
+        Self::message(error.to_string())
+    }
 }
 
 pub fn safe_backup_relative_path(
@@ -17,9 +35,8 @@ pub fn safe_backup_relative_path(
     deployment: &str,
     file_name: &str,
 ) -> Result<PathBuf, PathSafetyError> {
-    let safe_segment = Regex::new(r"^[A-Za-z0-9._-]+$").expect("static regex compiles");
     for segment in [project, deployment, file_name] {
-        if !safe_segment.is_match(segment) {
+        if !is_safe_segment(segment) {
             return Err(PathSafetyError::UnsafeName);
         }
     }
@@ -41,6 +58,13 @@ pub fn ensure_relative_safe(path: &Path) -> Result<(), PathSafetyError> {
     }
 
     Ok(())
+}
+
+fn is_safe_segment(segment: &str) -> bool {
+    !segment.is_empty()
+        && segment
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
 }
 
 #[cfg(test)]
@@ -69,5 +93,17 @@ mod tests {
     fn rejects_unsafe_segments() {
         let err = safe_backup_relative_path("project one", "prod", "backup.zip").unwrap_err();
         assert_eq!(err, PathSafetyError::UnsafeName);
+    }
+
+    #[test]
+    fn rejects_empty_and_non_ascii_segments() {
+        assert_eq!(
+            safe_backup_relative_path("", "prod", "backup.zip").unwrap_err(),
+            PathSafetyError::UnsafeName
+        );
+        assert_eq!(
+            safe_backup_relative_path("projet", "prod", "backup-ñ.zip").unwrap_err(),
+            PathSafetyError::UnsafeName
+        );
     }
 }

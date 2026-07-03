@@ -168,6 +168,7 @@ jobs:
             done
             return 1
           }
+          publish_crate firstparty-error
           publish_crate convex-autobackup-core
           publish_crate convex-autobackup-server
           publish_crate convex-autobackup-worker

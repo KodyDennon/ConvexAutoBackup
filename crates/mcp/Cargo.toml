@@ -12,6 +12,6 @@ keywords = ["convex", "backup", "mcp", "automation", "restore"]
 categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
-anyhow.workspace = true
+firstparty-error = { workspace = true, features = ["serde_json"] }
 serde.workspace = true
 serde_json.workspace = true

@@ -1,7 +1,7 @@
 use crate::models::StorageKind;
 use crate::storage::{s3_client_from_destination, s3_object_key_from_uri};
 use crate::{AppDatabase, BackupManifest};
-use anyhow::{Context, anyhow};
+use crate::{Result, ResultContext, error};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
@@ -18,14 +18,11 @@ pub struct VerificationResult {
     pub actual_size_bytes: u64,
 }
 
-pub async fn verify_run(
-    database: &AppDatabase,
-    run_id: Uuid,
-) -> anyhow::Result<VerificationResult> {
+pub async fn verify_run(database: &AppDatabase, run_id: Uuid) -> Result<VerificationResult> {
     let run = database.get_run_record(run_id)?;
     let manifest_json = run
         .manifest_json
-        .ok_or_else(|| anyhow!("run {run_id} does not have a manifest"))?;
+        .ok_or_else(|| error!("run {run_id} does not have a manifest"))?;
     let manifest: BackupManifest =
         serde_json::from_str(&manifest_json).context("stored manifest JSON is invalid")?;
     let archive_bytes = read_archive_bytes(database, run.run.job_id, &manifest.storage_uri).await?;
@@ -46,7 +43,7 @@ async fn read_archive_bytes(
     database: &AppDatabase,
     job_id: Uuid,
     storage_uri: &str,
-) -> anyhow::Result<Vec<u8>> {
+) -> Result<Vec<u8>> {
     if storage_uri.starts_with("file://") {
         let archive_path = file_uri_to_path(storage_uri)?;
         return std::fs::read(&archive_path)
@@ -64,39 +61,39 @@ async fn read_archive_bytes(
                     .context("failed to read S3 archive")?;
                 return Ok(bytes);
             }
-            _ => return Err(anyhow!("run is not associated with an S3 destination")),
+            _ => return Err(error!("run is not associated with an S3 destination")),
         }
     }
-    Err(anyhow!("unsupported archive URI {storage_uri}"))
+    Err(error!("unsupported archive URI {storage_uri}"))
 }
 
-fn file_uri_to_path(uri: &str) -> anyhow::Result<PathBuf> {
+fn file_uri_to_path(uri: &str) -> Result<PathBuf> {
     uri.strip_prefix("file://")
         .map(PathBuf::from)
-        .ok_or_else(|| anyhow!("verification currently supports file:// archives"))
+        .ok_or_else(|| error!("verification currently supports file:// archives"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
-        BackupEngine, ConvexExporter, CreateCloudTarget, CreateLocalDestination, CreateProject,
-        CreateScheduledJob, ExportRequest, RetentionPolicy,
+        BackupEngine, ConvexExporter, ConvexIoFuture, CreateCloudTarget, CreateLocalDestination,
+        CreateProject, CreateScheduledJob, ExportRequest, RetentionPolicy,
     };
-    use async_trait::async_trait;
     use std::path::Path;
 
     struct FixtureExporter;
 
-    #[async_trait]
     impl ConvexExporter for FixtureExporter {
-        async fn export_to_path(
-            &self,
+        fn export_to_path<'a>(
+            &'a self,
             _request: ExportRequest,
-            output_path: &Path,
-        ) -> anyhow::Result<String> {
-            tokio::fs::write(output_path, b"verified export").await?;
-            Ok("verified".to_string())
+            output_path: &'a Path,
+        ) -> ConvexIoFuture<'a> {
+            Box::pin(async move {
+                tokio::fs::write(output_path, b"verified export").await?;
+                Ok("verified".to_string())
+            })
         }
     }
 

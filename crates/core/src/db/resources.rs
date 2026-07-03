@@ -7,7 +7,7 @@ use crate::models::{
     BackupJob, ConvexTarget, ConvexTargetKind, EncryptionMode, Project, SecretRef,
     StorageDestination, StorageKind,
 };
-use anyhow::{Context, anyhow};
+use crate::{Result, ResultContext, error};
 use chrono::Utc;
 use rusqlite::{OptionalExtension, params};
 use uuid::Uuid;
@@ -15,7 +15,7 @@ use uuid::Uuid;
 use super::rows::{destination_from_row, job_from_row, project_from_row, target_from_row};
 
 impl AppDatabase {
-    pub fn create_project(&self, input: CreateProject) -> anyhow::Result<Project> {
+    pub fn create_project(&self, input: CreateProject) -> Result<Project> {
         require_non_empty("project name", &input.name)?;
         let connection = self.connection()?;
         let project = Project {
@@ -45,22 +45,20 @@ impl AppDatabase {
         Ok(project)
     }
 
-    pub fn list_projects(&self) -> anyhow::Result<Vec<Project>> {
+    pub fn list_projects(&self) -> Result<Vec<Project>> {
         let connection = self.connection()?;
         let mut statement = connection.prepare(
             "SELECT id, team_id, name, description, created_at FROM projects ORDER BY created_at ASC",
         )?;
         let rows = statement.query_map([], project_from_row)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
     }
 
-    pub fn create_cloud_target(&self, input: CreateCloudTarget) -> anyhow::Result<ConvexTarget> {
+    pub fn create_cloud_target(&self, input: CreateCloudTarget) -> Result<ConvexTarget> {
         require_non_empty("target name", &input.name)?;
         require_non_empty("deployment", &input.deployment)?;
         if input.deploy_key_env.is_none() && input.deploy_key_secret_id.is_none() {
-            return Err(anyhow!(
-                "deploy_key_env or deploy_key_secret_id is required"
-            ));
+            return Err(error!("deploy_key_env or deploy_key_secret_id is required"));
         }
         self.require_project(input.project_id)?;
         if let Some(secret_id) = input.deploy_key_secret_id {
@@ -76,7 +74,7 @@ impl AppDatabase {
             let deploy_key_env = input
                 .deploy_key_env
                 .as_ref()
-                .ok_or_else(|| anyhow!("deploy key env is required"))?;
+                .ok_or_else(|| error!("deploy key env is required"))?;
             require_non_empty("deploy key env", deploy_key_env)?;
             SecretRef {
                 id: Uuid::now_v7(),
@@ -117,20 +115,20 @@ impl AppDatabase {
         Ok(target)
     }
 
-    pub fn list_targets(&self) -> anyhow::Result<Vec<ConvexTarget>> {
+    pub fn list_targets(&self) -> Result<Vec<ConvexTarget>> {
         let connection = self.connection()?;
         let mut statement = connection.prepare(
             "SELECT id, project_id, name, kind, deployment, url, secret_id, secret_label
              FROM targets ORDER BY name ASC",
         )?;
         let rows = statement.query_map([], target_from_row)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
     }
 
     pub fn create_local_destination(
         &self,
         input: CreateLocalDestination,
-    ) -> anyhow::Result<StorageDestination> {
+    ) -> Result<StorageDestination> {
         require_non_empty("destination name", &input.name)?;
         require_non_empty("destination root", &input.root)?;
         let destination = StorageDestination {
@@ -145,10 +143,7 @@ impl AppDatabase {
         Ok(destination)
     }
 
-    pub fn create_s3_destination(
-        &self,
-        input: CreateS3Destination,
-    ) -> anyhow::Result<StorageDestination> {
+    pub fn create_s3_destination(&self, input: CreateS3Destination) -> Result<StorageDestination> {
         require_non_empty("destination name", &input.name)?;
         require_non_empty("bucket", &input.bucket)?;
         self.require_secret(input.credentials_secret_id)?;
@@ -173,17 +168,17 @@ impl AppDatabase {
         Ok(destination)
     }
 
-    pub fn list_destinations(&self) -> anyhow::Result<Vec<StorageDestination>> {
+    pub fn list_destinations(&self) -> Result<Vec<StorageDestination>> {
         let connection = self.connection()?;
         let mut statement = connection.prepare(
             "SELECT id, team_id, name, kind_json, encryption_json, retention_json
              FROM destinations ORDER BY name ASC",
         )?;
         let rows = statement.query_map([], destination_from_row)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
     }
 
-    pub fn create_job(&self, input: CreateScheduledJob) -> anyhow::Result<BackupJob> {
+    pub fn create_job(&self, input: CreateScheduledJob) -> Result<BackupJob> {
         require_non_empty("job name", &input.name)?;
         self.require_project(input.project_id)?;
         self.require_target(input.target_id)?;
@@ -221,17 +216,17 @@ impl AppDatabase {
         Ok(job)
     }
 
-    pub fn list_jobs(&self) -> anyhow::Result<Vec<BackupJob>> {
+    pub fn list_jobs(&self) -> Result<Vec<BackupJob>> {
         let connection = self.connection()?;
         let mut statement = connection.prepare(
             "SELECT id, project_id, target_id, destination_id, name, include_file_storage, schedule_enabled
              FROM jobs ORDER BY name ASC",
         )?;
         let rows = statement.query_map([], job_from_row)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
     }
 
-    pub fn get_job_bundle(&self, job_id: Uuid) -> anyhow::Result<JobBundle> {
+    pub fn get_job_bundle(&self, job_id: Uuid) -> Result<JobBundle> {
         let connection = self.connection()?;
         let job = self.get_job(job_id)?;
         let project = connection.query_row(
@@ -257,7 +252,7 @@ impl AppDatabase {
         })
     }
 
-    pub fn get_target(&self, target_id: Uuid) -> anyhow::Result<ConvexTarget> {
+    pub fn get_target(&self, target_id: Uuid) -> Result<ConvexTarget> {
         let connection = self.connection()?;
         connection
             .query_row(
@@ -266,10 +261,10 @@ impl AppDatabase {
                 target_from_row,
             )
             .optional()?
-            .ok_or_else(|| anyhow!("target {target_id} does not exist"))
+            .ok_or_else(|| error!("target {target_id} does not exist"))
     }
 
-    fn get_job(&self, job_id: Uuid) -> anyhow::Result<BackupJob> {
+    fn get_job(&self, job_id: Uuid) -> Result<BackupJob> {
         let connection = self.connection()?;
         connection
             .query_row(
@@ -279,14 +274,14 @@ impl AppDatabase {
                 job_from_row,
             )
             .optional()?
-            .ok_or_else(|| anyhow!("job {job_id} does not exist"))
+            .ok_or_else(|| error!("job {job_id} does not exist"))
     }
 
     fn insert_destination(
         &self,
         destination: &StorageDestination,
         audit_prefix: &str,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let connection = self.connection()?;
         connection.execute(
             "INSERT INTO destinations (id, team_id, name, kind_json, encryption_json, retention_json)

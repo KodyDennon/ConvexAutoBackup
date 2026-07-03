@@ -14,12 +14,40 @@ pub struct ManagedRunnerStatus {
 }
 
 pub fn default_data_dir() -> PathBuf {
-    std::env::var("CONVEX_AUTOBACKUP_DATA_DIR")
+    default_data_dir_from(|name| std::env::var(name).ok())
+}
+
+fn default_data_dir_from(mut env: impl FnMut(&str) -> Option<String>) -> PathBuf {
+    if let Some(path) = env("CONVEX_AUTOBACKUP_DATA_DIR").filter(|value| !value.is_empty()) {
+        return PathBuf::from(path);
+    }
+
+    platform_data_home(&mut env)
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("convex-autobackup")
+}
+
+#[cfg(windows)]
+fn platform_data_home(env: &mut impl FnMut(&str) -> Option<String>) -> Option<PathBuf> {
+    env("APPDATA")
+        .filter(|value| !value.is_empty())
         .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            dirs::data_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join("convex-autobackup")
+        .or_else(|| {
+            env("HOME")
+                .filter(|value| !value.is_empty())
+                .map(|home| PathBuf::from(home).join("AppData").join("Roaming"))
+        })
+}
+
+#[cfg(not(windows))]
+fn platform_data_home(env: &mut impl FnMut(&str) -> Option<String>) -> Option<PathBuf> {
+    env("XDG_DATA_HOME")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| {
+            env("HOME")
+                .filter(|value| !value.is_empty())
+                .map(|home| PathBuf::from(home).join(".local").join("share"))
         })
 }
 
@@ -51,5 +79,56 @@ pub fn runner_status(data_dir: &Path) -> ManagedRunnerStatus {
         convex_bin: bin.display().to_string(),
         package: CONVEX_CLI_PACKAGE,
         version: CONVEX_CLI_VERSION,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn env_dir(values: &[(&str, &str)]) -> PathBuf {
+        let values = values
+            .iter()
+            .map(|(key, value)| ((*key).to_string(), (*value).to_string()))
+            .collect::<HashMap<_, _>>();
+        default_data_dir_from(|key| values.get(key).cloned())
+    }
+
+    #[test]
+    fn explicit_data_dir_wins() {
+        assert_eq!(
+            env_dir(&[
+                ("CONVEX_AUTOBACKUP_DATA_DIR", "/custom/data"),
+                ("XDG_DATA_HOME", "/xdg")
+            ]),
+            PathBuf::from("/custom/data")
+        );
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn unix_uses_xdg_then_home_fallback() {
+        assert_eq!(
+            env_dir(&[("XDG_DATA_HOME", "/xdg")]),
+            PathBuf::from("/xdg/convex-autobackup")
+        );
+        assert_eq!(
+            env_dir(&[("HOME", "/home/operator")]),
+            PathBuf::from("/home/operator/.local/share/convex-autobackup")
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_uses_appdata_then_home_fallback() {
+        assert_eq!(
+            env_dir(&[("APPDATA", r"C:\Users\Operator\AppData\Roaming")]),
+            PathBuf::from(r"C:\Users\Operator\AppData\Roaming\convex-autobackup")
+        );
+        assert_eq!(
+            env_dir(&[("HOME", r"C:\Users\Operator")]),
+            PathBuf::from(r"C:\Users\Operator\AppData\Roaming\convex-autobackup")
+        );
     }
 }

@@ -1,3 +1,4 @@
+use crate::Result;
 use crate::backup::{BackupEngine, BackupRunResult};
 use crate::convex::ConvexExporter;
 use crate::db::AppDatabase;
@@ -21,7 +22,7 @@ impl SchedulerService {
     pub async fn run_due_once(
         &self,
         exporter: &dyn ConvexExporter,
-    ) -> anyhow::Result<Vec<BackupRunResult>> {
+    ) -> Result<Vec<BackupRunResult>> {
         let due = self.database.due_schedules(Utc::now())?;
         let mut results = Vec::with_capacity(due.len());
         for schedule in due {
@@ -40,23 +41,23 @@ impl SchedulerService {
 mod tests {
     use super::*;
     use crate::{
-        CreateCloudTarget, CreateLocalDestination, CreateProject, CreateScheduledJob,
-        MissedRunPolicy, RetentionPolicy, Schedule,
+        ConvexIoFuture, CreateCloudTarget, CreateLocalDestination, CreateProject,
+        CreateScheduledJob, MissedRunPolicy, RetentionPolicy, Schedule,
     };
-    use async_trait::async_trait;
     use std::path::Path;
 
     struct FixtureExporter;
 
-    #[async_trait]
     impl ConvexExporter for FixtureExporter {
-        async fn export_to_path(
-            &self,
+        fn export_to_path<'a>(
+            &'a self,
             _request: crate::ExportRequest,
-            output_path: &Path,
-        ) -> anyhow::Result<String> {
-            tokio::fs::write(output_path, b"scheduled export").await?;
-            Ok("scheduled".to_string())
+            output_path: &'a Path,
+        ) -> ConvexIoFuture<'a> {
+            Box::pin(async move {
+                tokio::fs::write(output_path, b"scheduled export").await?;
+                Ok("scheduled".to_string())
+            })
         }
     }
 

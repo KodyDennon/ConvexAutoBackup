@@ -2,6 +2,8 @@
 
 ## 0.1.0-beta.2
 
+- Added the publishable `firstparty-error` crate and release publishing order for it.
+- Replaced ownable runtime dependencies with first-party code for error handling, scheduling, path validation, data directory selection, and bundled asset embedding.
 - Added crate-specific README files and package metadata for all published crates.
 - Fixed prerelease internal dependency pins for crates.io publishing.
 - Filtered release artifacts so Docker build records are not uploaded to GitHub Releases.

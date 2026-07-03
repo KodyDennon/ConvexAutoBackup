@@ -2,7 +2,7 @@ use crate::{
     AppDatabase, BackupManifest, SecretVault, StorageDestination, StorageKind,
     paths::safe_backup_relative_path,
 };
-use anyhow::{Context, anyhow};
+use crate::{Result, ResultContext, error};
 use chrono::Utc;
 use hmac::{Hmac, Mac};
 use percent_encoding::{NON_ALPHANUMERIC, percent_encode};
@@ -39,7 +39,7 @@ pub async fn store_backup(
     deployment: &str,
     archive_bytes: &[u8],
     manifest: &BackupManifest,
-) -> anyhow::Result<StoredBackup> {
+) -> Result<StoredBackup> {
     match &destination.kind {
         StorageKind::LocalFilesystem { .. } => store_local_backup(
             destination,
@@ -68,9 +68,9 @@ pub fn store_local_backup(
     deployment: &str,
     archive_bytes: &[u8],
     manifest: &BackupManifest,
-) -> anyhow::Result<StoredBackup> {
+) -> Result<StoredBackup> {
     let StorageKind::LocalFilesystem { root } = &destination.kind else {
-        return Err(anyhow!(
+        return Err(error!(
             "destination {} is not local filesystem",
             destination.id
         ));
@@ -92,7 +92,7 @@ pub fn store_local_backup(
     let manifest_path = Path::new(root).join(&relative_manifest);
     let parent = archive_path
         .parent()
-        .ok_or_else(|| anyhow!("archive path has no parent"))?;
+        .ok_or_else(|| error!("archive path has no parent"))?;
     std::fs::create_dir_all(parent)
         .with_context(|| format!("failed to create backup directory {}", parent.display()))?;
 
@@ -123,7 +123,7 @@ pub fn prune_local_retention(
     destination: &StorageDestination,
     project_name: &str,
     deployment: &str,
-) -> anyhow::Result<RetentionPruneResult> {
+) -> Result<RetentionPruneResult> {
     let StorageKind::LocalFilesystem { root } = &destination.kind else {
         return Ok(RetentionPruneResult {
             deleted_archives: 0,
@@ -147,7 +147,7 @@ pub fn prune_local_retention(
     }
 
     let mut manifests = std::fs::read_dir(&backup_dir)?
-        .filter_map(Result::ok)
+        .filter_map(std::result::Result::ok)
         .map(|entry| entry.path())
         .filter(|path| {
             path.file_name()
@@ -174,7 +174,7 @@ pub fn prune_local_retention(
             .file_name()
             .and_then(|name| name.to_str())
             .and_then(|name| name.strip_suffix(".manifest.json"))
-            .ok_or_else(|| anyhow!("invalid manifest file name {}", manifest_path.display()))?;
+            .ok_or_else(|| error!("invalid manifest file name {}", manifest_path.display()))?;
         let archive_path = manifest_path.with_file_name(archive_name);
         if archive_path.exists() {
             std::fs::remove_file(&archive_path)
@@ -195,7 +195,7 @@ pub async fn store_s3_backup(
     deployment: &str,
     archive_bytes: &[u8],
     manifest: &BackupManifest,
-) -> anyhow::Result<StoredBackup> {
+) -> Result<StoredBackup> {
     let StorageKind::S3Compatible {
         bucket,
         region: _,
@@ -204,7 +204,7 @@ pub async fn store_s3_backup(
         credentials: _,
     } = &destination.kind
     else {
-        return Err(anyhow!(
+        return Err(error!(
             "destination {} is not S3-compatible",
             destination.id
         ));
@@ -244,7 +244,7 @@ pub async fn store_s3_backup(
 pub fn s3_client_from_destination(
     database: &AppDatabase,
     destination: &StorageDestination,
-) -> anyhow::Result<S3CompatibleClient> {
+) -> Result<S3CompatibleClient> {
     let StorageKind::S3Compatible {
         bucket,
         region,
@@ -253,7 +253,7 @@ pub fn s3_client_from_destination(
         ..
     } = &destination.kind
     else {
-        return Err(anyhow!(
+        return Err(error!(
             "destination {} is not S3-compatible",
             destination.id
         ));
@@ -269,13 +269,13 @@ pub fn s3_client_from_destination(
     )
 }
 
-pub fn s3_object_key_from_uri(uri: &str) -> anyhow::Result<String> {
+pub fn s3_object_key_from_uri(uri: &str) -> Result<String> {
     let without_scheme = uri
         .strip_prefix("s3://")
-        .ok_or_else(|| anyhow!("S3 URI must start with s3://"))?;
+        .ok_or_else(|| error!("S3 URI must start with s3://"))?;
     let (_, key) = without_scheme
         .split_once('/')
-        .ok_or_else(|| anyhow!("S3 URI must include bucket and key"))?;
+        .ok_or_else(|| error!("S3 URI must include bucket and key"))?;
     Ok(key.to_string())
 }
 
@@ -306,7 +306,7 @@ impl S3CompatibleClient {
         region: String,
         endpoint: Option<String>,
         credentials: S3CredentialSecret,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self> {
         Ok(Self {
             http: HttpClient::builder()
                 .build()
@@ -318,7 +318,7 @@ impl S3CompatibleClient {
         })
     }
 
-    pub async fn put_object(&self, key: &str, body: Vec<u8>) -> anyhow::Result<S3Response> {
+    pub async fn put_object(&self, key: &str, body: Vec<u8>) -> Result<S3Response> {
         let request = self.signed_request(Method::PUT, key, body)?;
         let response = self
             .http
@@ -331,7 +331,7 @@ impl S3CompatibleClient {
         ensure_success(response).await
     }
 
-    pub async fn get_object(&self, key: &str) -> anyhow::Result<Vec<u8>> {
+    pub async fn get_object(&self, key: &str) -> Result<Vec<u8>> {
         let request = self.signed_request(Method::GET, key, Vec::new())?;
         let response = self
             .http
@@ -344,17 +344,12 @@ impl S3CompatibleClient {
         Ok(response.body)
     }
 
-    fn signed_request(
-        &self,
-        method: Method,
-        key: &str,
-        body: Vec<u8>,
-    ) -> anyhow::Result<SignedS3Request> {
+    fn signed_request(&self, method: Method, key: &str, body: Vec<u8>) -> Result<SignedS3Request> {
         let now = Utc::now();
         let url = self.object_url(key)?;
         let host = url
             .host_str()
-            .ok_or_else(|| anyhow!("S3 endpoint URL has no host"))?
+            .ok_or_else(|| error!("S3 endpoint URL has no host"))?
             .to_string();
         let payload_hash = hex_sha256(&body);
         let amz_date = now.format("%Y%m%dT%H%M%SZ").to_string();
@@ -401,7 +396,7 @@ impl S3CompatibleClient {
         })
     }
 
-    fn object_url(&self, key: &str) -> anyhow::Result<Url> {
+    fn object_url(&self, key: &str) -> Result<Url> {
         let encoded_key = encode_s3_key(key);
         if let Some(endpoint) = &self.endpoint {
             let endpoint = endpoint.trim_end_matches('/');
@@ -432,7 +427,7 @@ pub struct S3Response {
     pub body: Vec<u8>,
 }
 
-async fn ensure_success(response: reqwest::Response) -> anyhow::Result<S3Response> {
+async fn ensure_success(response: reqwest::Response) -> Result<S3Response> {
     let status = response.status();
     let body = response
         .bytes()
@@ -440,7 +435,7 @@ async fn ensure_success(response: reqwest::Response) -> anyhow::Result<S3Respons
         .context("failed to read S3 response body")?
         .to_vec();
     if !status.is_success() {
-        return Err(anyhow!(
+        return Err(error!(
             "S3 request failed with status {status}: {}",
             String::from_utf8_lossy(&body)
         ));
@@ -459,7 +454,7 @@ fn hex_sha256(bytes: impl AsRef<[u8]>) -> String {
     format!("{:x}", Sha256::digest(bytes.as_ref()))
 }
 
-fn sign_v4(secret: &str, date: &str, region: &str, string_to_sign: &str) -> anyhow::Result<String> {
+fn sign_v4(secret: &str, date: &str, region: &str, string_to_sign: &str) -> Result<String> {
     let k_date = hmac_sha256(format!("AWS4{secret}").as_bytes(), date.as_bytes())?;
     let k_region = hmac_sha256(&k_date, region.as_bytes())?;
     let k_service = hmac_sha256(&k_region, b"s3")?;
@@ -470,7 +465,7 @@ fn sign_v4(secret: &str, date: &str, region: &str, string_to_sign: &str) -> anyh
     )?))
 }
 
-fn hmac_sha256(key: &[u8], value: &[u8]) -> anyhow::Result<Vec<u8>> {
+fn hmac_sha256(key: &[u8], value: &[u8]) -> Result<Vec<u8>> {
     let mut mac = HmacSha256::new_from_slice(key).context("invalid HMAC key")?;
     mac.update(value);
     Ok(mac.finalize().into_bytes().to_vec())

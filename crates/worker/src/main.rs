@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand};
-use convex_autobackup_core::{AppDatabase, BackupEngine, CommandConvexExporter, SchedulerService};
+use convex_autobackup_core::{
+    AppDatabase, BackupEngine, CommandConvexExporter, Error, Result, SchedulerService,
+};
 use convex_autobackup_worker::QueuePolicy;
 use serde::Serialize;
 use std::{
@@ -53,7 +55,7 @@ struct RunOnceOutput {
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<()> {
     let cli = Cli::parse();
     let data_dir = cli.data_dir.unwrap_or_else(default_data_dir);
     match cli.command {
@@ -66,7 +68,11 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Run { poll_seconds } => {
             fmt()
-                .with_env_filter(EnvFilter::from_default_env().add_directive("info".parse()?))
+                .with_env_filter(EnvFilter::from_default_env().add_directive(
+                    "info".parse().map_err(|error| {
+                        Error::with_source("default log directive is invalid", error)
+                    })?,
+                ))
                 .init();
             let scheduler = scheduler_for_data_dir(&data_dir)?;
             let exporter = CommandConvexExporter::for_data_dir(&data_dir);
@@ -108,13 +114,13 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn scheduler_for_data_dir(data_dir: &Path) -> anyhow::Result<SchedulerService> {
+fn scheduler_for_data_dir(data_dir: &Path) -> Result<SchedulerService> {
     let database = AppDatabase::open(data_dir.join("convex-autobackup.sqlite3"))?;
     let backup_engine = BackupEngine::new(database.clone(), data_dir.join("staging"));
     Ok(SchedulerService::new(database, backup_engine))
 }
 
-fn print_output<T: Serialize>(json: bool, value: &T) -> anyhow::Result<()> {
+fn print_output<T: Serialize>(json: bool, value: &T) -> Result<()> {
     if json {
         println!("{}", serde_json::to_string_pretty(value)?);
     } else {

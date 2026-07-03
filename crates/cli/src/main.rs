@@ -1,15 +1,14 @@
 mod args;
 
-use anyhow::Context;
 use args::*;
 use clap::Parser;
 use convex_autobackup_core::{
     AppDatabase, AuthService, BackupEngine, CONVEX_CLI_PACKAGE, CONVEX_CLI_VERSION,
     CommandConvexExporter, CommandConvexImporter, CreateCloudTarget, CreateJobSchedule,
     CreateLocalDestination, CreateProject, CreateS3Destination, CreateScheduledJob, CreateUser,
-    MissedRunPolicy, RestoreEngine, RetentionPolicy, Role, Schedule, SchedulerService, SecretKind,
-    SecretVault, convex_runner_dir, generate_dr_report, list_secret_metadata, npm_program,
-    runner_status, verify_run,
+    MissedRunPolicy, RestoreEngine, Result, ResultContext, RetentionPolicy, Role, Schedule,
+    SchedulerService, SecretKind, SecretVault, convex_runner_dir, error, generate_dr_report,
+    list_secret_metadata, npm_program, runner_status, verify_run,
 };
 use convex_autobackup_server::AppState;
 use serde::Serialize;
@@ -17,7 +16,7 @@ use std::{path::PathBuf, time::Duration};
 use tokio::{net::TcpListener, process::Command as TokioCommand, time::sleep};
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<()> {
     let cli = Cli::parse();
     let data_dir = cli.data_dir.unwrap_or_else(default_data_dir);
     let database_path = data_dir.join("convex-autobackup.sqlite3");
@@ -95,7 +94,7 @@ async fn main() -> anyhow::Result<()> {
             let has_error = output.checks.iter().any(|check| check.status == "error");
             print_output(json, &output)?;
             if has_error {
-                anyhow::bail!("doctor found install problems");
+                return Err(error!("doctor found install problems"));
             }
         }
         Command::Runner { command } => match command {
@@ -350,7 +349,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn print_output<T: Serialize>(json: bool, value: &T) -> anyhow::Result<()> {
+fn print_output<T: Serialize>(json: bool, value: &T) -> Result<()> {
     if json {
         println!("{}", serde_json::to_string_pretty(value)?);
     } else {
@@ -363,7 +362,7 @@ async fn run_scheduler_loop(
     scheduler: SchedulerService,
     exporter: CommandConvexExporter,
     poll_seconds: u64,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     loop {
         if let Err(error) = scheduler.run_due_once(&exporter).await {
             eprintln!("scheduler pass failed: {error}");
@@ -374,7 +373,7 @@ async fn run_scheduler_loop(
 
 async fn install_runner(
     data_dir: &std::path::Path,
-) -> anyhow::Result<convex_autobackup_core::ManagedRunnerStatus> {
+) -> Result<convex_autobackup_core::ManagedRunnerStatus> {
     let runner_dir = convex_runner_dir(data_dir);
     tokio::fs::create_dir_all(&runner_dir).await?;
     let package_json = serde_json::json!({
@@ -398,14 +397,16 @@ async fn install_runner(
         .await
         .with_context(|| format!("failed to execute {}", npm_program()))?;
     if !output.status.success() {
-        anyhow::bail!(
+        return Err(error!(
             "failed to install managed Convex runner: {}",
             String::from_utf8_lossy(&output.stderr)
-        );
+        ));
     }
     let status = runner_status(data_dir);
     if !status.installed {
-        anyhow::bail!("managed Convex runner install completed but binary was not found");
+        return Err(error!(
+            "managed Convex runner install completed but binary was not found"
+        ));
     }
     Ok(status)
 }
@@ -502,22 +503,22 @@ fn default_data_dir() -> PathBuf {
     convex_autobackup_core::default_data_dir()
 }
 
-fn parse_role(value: &str) -> anyhow::Result<Role> {
+fn parse_role(value: &str) -> Result<Role> {
     match value {
         "owner" => Ok(Role::Owner),
         "admin" => Ok(Role::Admin),
         "operator" => Ok(Role::Operator),
         "viewer" => Ok(Role::Viewer),
-        other => anyhow::bail!("unknown role {other}"),
+        other => Err(error!("unknown role {other}")),
     }
 }
 
-fn parse_secret_kind(value: &str) -> anyhow::Result<SecretKind> {
+fn parse_secret_kind(value: &str) -> Result<SecretKind> {
     match value {
         "convex_deploy_key" => Ok(SecretKind::ConvexDeployKey),
         "s3_credentials" => Ok(SecretKind::S3Credentials),
         "webhook_token" => Ok(SecretKind::WebhookToken),
         "encryption_key" => Ok(SecretKind::EncryptionKey),
-        other => anyhow::bail!("unknown secret kind {other}"),
+        other => Err(error!("unknown secret kind {other}")),
     }
 }

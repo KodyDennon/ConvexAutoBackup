@@ -7,7 +7,7 @@ use crate::models::{
     BackupJob, ConvexTarget, JobStatus, Project, RetentionPolicy, StorageDestination,
 };
 use crate::schedule::{MissedRunPolicy, Schedule};
-use anyhow::{Context, anyhow};
+use crate::{Result, ResultContext, error};
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -108,7 +108,7 @@ pub struct AppDatabase {
 }
 
 impl AppDatabase {
-    pub fn open(path: impl AsRef<Path>) -> anyhow::Result<Self> {
+    pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)
@@ -123,14 +123,14 @@ impl AppDatabase {
         &self.path
     }
 
-    pub fn connection(&self) -> anyhow::Result<Connection> {
+    pub fn connection(&self) -> Result<Connection> {
         let connection = Connection::open(&self.path)
             .with_context(|| format!("failed to open SQLite database {}", self.path.display()))?;
         connection.pragma_update(None, "foreign_keys", "ON")?;
         Ok(connection)
     }
 
-    pub fn migrate(&self) -> anyhow::Result<()> {
+    pub fn migrate(&self) -> Result<()> {
         let connection = self.connection()?;
         connection.execute_batch(
             r#"
@@ -253,31 +253,31 @@ impl AppDatabase {
         Ok(())
     }
 
-    pub fn default_team_id(&self) -> anyhow::Result<Uuid> {
+    pub fn default_team_id(&self) -> Result<Uuid> {
         let connection = self.connection()?;
         let id: String =
             connection.query_row("SELECT id FROM teams LIMIT 1", [], |row| row.get(0))?;
         Uuid::parse_str(&id).context("stored team id is not a UUID")
     }
 
-    pub fn user_count(&self) -> anyhow::Result<u64> {
+    pub fn user_count(&self) -> Result<u64> {
         let connection = self.connection()?;
         let count: i64 =
             connection.query_row("SELECT COUNT(*) FROM users", [], |row| row.get(0))?;
         Ok(count as u64)
     }
 
-    pub fn list_runs(&self) -> anyhow::Result<Vec<RunRecord>> {
+    pub fn list_runs(&self) -> Result<Vec<RunRecord>> {
         let connection = self.connection()?;
         let mut statement = connection.prepare(
             "SELECT id, job_id, status, started_at, finished_at, manifest_path, manifest_json, error
              FROM runs ORDER BY started_at DESC",
         )?;
         let rows = statement.query_map([], run_from_row)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
     }
 
-    pub fn get_run_record(&self, run_id: Uuid) -> anyhow::Result<RunRecord> {
+    pub fn get_run_record(&self, run_id: Uuid) -> Result<RunRecord> {
         let connection = self.connection()?;
         connection
             .query_row(
@@ -287,10 +287,10 @@ impl AppDatabase {
                 run_from_row,
             )
             .optional()?
-            .ok_or_else(|| anyhow!("run {run_id} does not exist"))
+            .ok_or_else(|| error!("run {run_id} does not exist"))
     }
 
-    pub fn create_schedule(&self, input: CreateJobSchedule) -> anyhow::Result<DueJobSchedule> {
+    pub fn create_schedule(&self, input: CreateJobSchedule) -> Result<DueJobSchedule> {
         self.require_exists("jobs", input.job_id, "job")?;
         let now = Utc::now();
         let next_due_at = input.schedule.next_after(now)?;
@@ -326,26 +326,26 @@ impl AppDatabase {
         Ok(schedule)
     }
 
-    pub fn list_schedules(&self) -> anyhow::Result<Vec<DueJobSchedule>> {
+    pub fn list_schedules(&self) -> Result<Vec<DueJobSchedule>> {
         let connection = self.connection()?;
         let mut statement = connection.prepare(
             "SELECT id, job_id, schedule_json, missed_run_policy, next_due_at FROM schedules ORDER BY next_due_at ASC",
         )?;
         let rows = statement.query_map([], schedule_from_row)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
     }
 
-    pub fn due_schedules(&self, now: DateTime<Utc>) -> anyhow::Result<Vec<DueJobSchedule>> {
+    pub fn due_schedules(&self, now: DateTime<Utc>) -> Result<Vec<DueJobSchedule>> {
         let connection = self.connection()?;
         let mut statement = connection.prepare(
             "SELECT id, job_id, schedule_json, missed_run_policy, next_due_at
              FROM schedules WHERE enabled = 1 AND next_due_at <= ?1 ORDER BY next_due_at ASC",
         )?;
         let rows = statement.query_map(params![now.to_rfc3339()], schedule_from_row)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
     }
 
-    pub fn advance_schedule(&self, schedule_id: Uuid, after: DateTime<Utc>) -> anyhow::Result<()> {
+    pub fn advance_schedule(&self, schedule_id: Uuid, after: DateTime<Utc>) -> Result<()> {
         let connection = self.connection()?;
         let schedule = connection.query_row(
             "SELECT id, job_id, schedule_json, missed_run_policy, next_due_at FROM schedules WHERE id = ?1",
@@ -364,7 +364,7 @@ impl AppDatabase {
         Ok(())
     }
 
-    pub fn insert_run(&self, job_id: Uuid) -> anyhow::Result<crate::models::BackupRun> {
+    pub fn insert_run(&self, job_id: Uuid) -> Result<crate::models::BackupRun> {
         let run = crate::models::BackupRun {
             id: Uuid::now_v7(),
             job_id,
@@ -401,7 +401,7 @@ impl AppDatabase {
         manifest_path: Option<String>,
         manifest_json: Option<String>,
         error: Option<String>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let connection = self.connection()?;
         connection.execute(
             "UPDATE runs
@@ -440,7 +440,7 @@ impl AppDatabase {
         resource_type: &str,
         resource_id: Option<Uuid>,
         message: &str,
-    ) -> anyhow::Result<AuditEvent> {
+    ) -> Result<AuditEvent> {
         require_non_empty("audit actor", actor)?;
         require_non_empty("audit action", action)?;
         require_non_empty("audit resource type", resource_type)?;
@@ -470,33 +470,33 @@ impl AppDatabase {
         Ok(event)
     }
 
-    pub fn list_audit_events(&self, limit: u32) -> anyhow::Result<Vec<AuditEvent>> {
+    pub fn list_audit_events(&self, limit: u32) -> Result<Vec<AuditEvent>> {
         let connection = self.connection()?;
         let mut statement = connection.prepare(
             "SELECT id, actor, action, resource_type, resource_id, message, created_at
              FROM audit_events ORDER BY created_at DESC LIMIT ?1",
         )?;
         let rows = statement.query_map(params![limit], audit_from_row)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
     }
 
-    pub(super) fn require_project(&self, id: Uuid) -> anyhow::Result<()> {
+    pub(super) fn require_project(&self, id: Uuid) -> Result<()> {
         self.require_exists("projects", id, "project")
     }
 
-    pub(super) fn require_target(&self, id: Uuid) -> anyhow::Result<()> {
+    pub(super) fn require_target(&self, id: Uuid) -> Result<()> {
         self.require_exists("targets", id, "target")
     }
 
-    pub(super) fn require_destination(&self, id: Uuid) -> anyhow::Result<()> {
+    pub(super) fn require_destination(&self, id: Uuid) -> Result<()> {
         self.require_exists("destinations", id, "destination")
     }
 
-    pub(super) fn require_secret(&self, id: Uuid) -> anyhow::Result<()> {
+    pub(super) fn require_secret(&self, id: Uuid) -> Result<()> {
         self.require_exists("secrets", id, "secret")
     }
 
-    fn require_exists(&self, table: &str, id: Uuid, label: &str) -> anyhow::Result<()> {
+    fn require_exists(&self, table: &str, id: Uuid, label: &str) -> Result<()> {
         let connection = self.connection()?;
         let count: i64 = connection.query_row(
             &format!("SELECT COUNT(*) FROM {table} WHERE id = ?1"),
@@ -504,15 +504,15 @@ impl AppDatabase {
             |row| row.get(0),
         )?;
         if count == 0 {
-            return Err(anyhow!("{label} {id} does not exist"));
+            return Err(error!("{label} {id} does not exist"));
         }
         Ok(())
     }
 }
 
-pub(super) fn require_non_empty(label: &str, value: &str) -> anyhow::Result<()> {
+pub(super) fn require_non_empty(label: &str, value: &str) -> Result<()> {
     if value.trim().is_empty() {
-        return Err(anyhow!("{label} is required"));
+        return Err(error!("{label} is required"));
     }
     Ok(())
 }

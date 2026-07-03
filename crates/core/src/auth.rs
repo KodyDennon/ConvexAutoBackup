@@ -1,5 +1,5 @@
 use crate::db::AppDatabase;
-use anyhow::anyhow;
+use crate::{Result, error};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
@@ -71,12 +71,12 @@ impl AuthService {
         Self { database }
     }
 
-    pub fn create_user(&self, input: CreateUser) -> anyhow::Result<User> {
+    pub fn create_user(&self, input: CreateUser) -> Result<User> {
         if !input.email.contains('@') {
-            return Err(anyhow!("email must contain @"));
+            return Err(error!("email must contain @"));
         }
         if input.password.len() < 12 {
-            return Err(anyhow!("password must be at least 12 characters"));
+            return Err(error!("password must be at least 12 characters"));
         }
         let password_hash = hash_password(&input.password)?;
         let user = User {
@@ -106,7 +106,7 @@ impl AuthService {
         Ok(user)
     }
 
-    pub fn list_users(&self) -> anyhow::Result<Vec<User>> {
+    pub fn list_users(&self) -> Result<Vec<User>> {
         let connection = self.database.connection()?;
         let mut statement = connection
             .prepare("SELECT id, email, role, created_at FROM users ORDER BY created_at ASC")?;
@@ -138,10 +138,10 @@ impl AuthService {
                     .with_timezone(&Utc),
             })
         })?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
     }
 
-    pub fn verify_password(&self, email: &str, password: &str) -> anyhow::Result<User> {
+    pub fn verify_password(&self, email: &str, password: &str) -> Result<User> {
         let connection = self.database.connection()?;
         let row = connection
             .query_row(
@@ -158,7 +158,7 @@ impl AuthService {
                 },
             )
             .optional()?
-            .ok_or_else(|| anyhow!("invalid email or password"))?;
+            .ok_or_else(|| error!("invalid email or password"))?;
 
         verify_password_hash(password, &row.2)?;
         Ok(User {
@@ -169,9 +169,9 @@ impl AuthService {
         })
     }
 
-    pub fn create_api_token(&self, user_id: Uuid, name: &str) -> anyhow::Result<ApiToken> {
+    pub fn create_api_token(&self, user_id: Uuid, name: &str) -> Result<ApiToken> {
         if name.trim().is_empty() {
-            return Err(anyhow!("token name is required"));
+            return Err(error!("token name is required"));
         }
         self.require_user(user_id)?;
         let raw = new_token();
@@ -204,7 +204,7 @@ impl AuthService {
         Ok(token)
     }
 
-    pub fn list_api_tokens(&self) -> anyhow::Result<Vec<ApiTokenMetadata>> {
+    pub fn list_api_tokens(&self) -> Result<Vec<ApiTokenMetadata>> {
         let connection = self.database.connection()?;
         let mut statement = connection.prepare(
             "SELECT id, user_id, name, created_at, revoked_at FROM api_tokens ORDER BY created_at DESC",
@@ -250,10 +250,10 @@ impl AuthService {
                     })?,
             })
         })?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
     }
 
-    pub fn revoke_api_token(&self, token_id: Uuid) -> anyhow::Result<ApiTokenMetadata> {
+    pub fn revoke_api_token(&self, token_id: Uuid) -> Result<ApiTokenMetadata> {
         let connection = self.database.connection()?;
         let existing = connection
             .query_row(
@@ -262,7 +262,7 @@ impl AuthService {
                 token_metadata_from_row,
             )
             .optional()?
-            .ok_or_else(|| anyhow!("API token {token_id} does not exist"))?;
+            .ok_or_else(|| error!("API token {token_id} does not exist"))?;
 
         if existing.revoked_at.is_none() {
             let revoked_at = Utc::now();
@@ -288,7 +288,7 @@ impl AuthService {
             .map_err(Into::into)
     }
 
-    pub fn authenticate_token(&self, raw: &str) -> anyhow::Result<User> {
+    pub fn authenticate_token(&self, raw: &str) -> Result<User> {
         let hash = token_hash(raw);
         let connection = self.database.connection()?;
         let row = connection
@@ -311,10 +311,10 @@ impl AuthService {
             .optional()?;
 
         let Some(row) = row else {
-            return Err(anyhow!("invalid API token"));
+            return Err(error!("invalid API token"));
         };
         if hash.as_bytes().ct_eq(row.4.as_bytes()).unwrap_u8() != 1 {
-            return Err(anyhow!("invalid API token"));
+            return Err(error!("invalid API token"));
         }
         Ok(User {
             id: Uuid::parse_str(&row.0)?,
@@ -324,7 +324,7 @@ impl AuthService {
         })
     }
 
-    fn require_user(&self, user_id: Uuid) -> anyhow::Result<()> {
+    fn require_user(&self, user_id: Uuid) -> Result<()> {
         let connection = self.database.connection()?;
         let count: i64 = connection.query_row(
             "SELECT COUNT(*) FROM users WHERE id = ?1",
@@ -332,7 +332,7 @@ impl AuthService {
             |row| row.get(0),
         )?;
         if count == 0 {
-            return Err(anyhow!("user {user_id} does not exist"));
+            return Err(error!("user {user_id} does not exist"));
         }
         Ok(())
     }
@@ -370,24 +370,24 @@ fn token_metadata_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ApiToken
     })
 }
 
-fn hash_password(password: &str) -> anyhow::Result<String> {
+fn hash_password(password: &str) -> Result<String> {
     let mut salt_bytes = [0_u8; 16];
     getrandom::fill(&mut salt_bytes)
-        .map_err(|error| anyhow!("failed to generate password salt: {error}"))?;
+        .map_err(|error| error!("failed to generate password salt: {error}"))?;
     let salt = SaltString::encode_b64(&salt_bytes)
-        .map_err(|error| anyhow!("invalid password salt: {error}"))?;
+        .map_err(|error| error!("invalid password salt: {error}"))?;
     Ok(Argon2::default()
         .hash_password(password.as_bytes(), &salt)
-        .map_err(|error| anyhow!("failed to hash password: {error}"))?
+        .map_err(|error| error!("failed to hash password: {error}"))?
         .to_string())
 }
 
-fn verify_password_hash(password: &str, encoded: &str) -> anyhow::Result<()> {
+fn verify_password_hash(password: &str, encoded: &str) -> Result<()> {
     let parsed = PasswordHash::new(encoded)
-        .map_err(|error| anyhow!("stored password hash is invalid: {error}"))?;
+        .map_err(|error| error!("stored password hash is invalid: {error}"))?;
     Argon2::default()
         .verify_password(password.as_bytes(), &parsed)
-        .map_err(|_| anyhow!("invalid email or password"))
+        .map_err(|_| error!("invalid email or password"))
 }
 
 fn new_token() -> String {
@@ -410,13 +410,13 @@ fn role_to_str(role: Role) -> &'static str {
     }
 }
 
-fn role_from_str(value: &str) -> anyhow::Result<Role> {
+fn role_from_str(value: &str) -> Result<Role> {
     match value {
         "owner" => Ok(Role::Owner),
         "admin" => Ok(Role::Admin),
         "operator" => Ok(Role::Operator),
         "viewer" => Ok(Role::Viewer),
-        other => Err(anyhow!("unknown role {other}")),
+        other => Err(error!("unknown role {other}")),
     }
 }
 

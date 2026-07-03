@@ -1,0 +1,27 @@
+[package]
+name = "firstparty-error"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+description = "Small owned error and context primitives for first-party Rust applications"
+readme = "README.md"
+keywords = ["error", "context", "result"]
+categories = ["rust-patterns"]
+
+[dependencies]
+chrono = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true }
+rusqlite = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true }
+
+[features]
+default = []
+chrono = ["dep:chrono"]
+reqwest = ["dep:reqwest"]
+rusqlite = ["dep:rusqlite"]
+serde_json = ["dep:serde_json"]
+uuid = ["dep:uuid"]

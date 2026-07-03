@@ -1,4 +1,4 @@
-use crate::{AppDatabase, JobStatus};
+use crate::{AppDatabase, JobStatus, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -22,7 +22,7 @@ pub enum DrReadiness {
     NoBackups,
 }
 
-pub fn generate_dr_report(database: &AppDatabase) -> anyhow::Result<DrReport> {
+pub fn generate_dr_report(database: &AppDatabase) -> Result<DrReport> {
     let runs = database.list_runs()?;
     let successful_runs = runs
         .iter()

@@ -83,7 +83,7 @@ The release workflow publishes:
 - GitHub Release provenance attestations.
 - GHCR image `ghcr.io/kodydennon/convex-autobackup`.
 - Docker Hub image `kodydoty/convex-autobackup`.
-- crates.io packages for `convex-autobackup`, `convex-autobackup-core`, `convex-autobackup-server`, `convex-autobackup-worker`, and `convex-autobackup-mcp`.
+- crates.io packages for `firstparty-error`, `convex-autobackup-core`, `convex-autobackup-server`, `convex-autobackup-worker`, `convex-autobackup-mcp`, and `convex-autobackup`.
 
 Docker Hub and crates.io publishing require repository secrets:
 

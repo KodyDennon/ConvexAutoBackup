@@ -31,7 +31,7 @@ Use a third-party crate only when at least one of these is true:
 
 Everything else should move toward first-party ownership. Ownership can mean local code, an in-repo Convex-specific crate, or a separate general-purpose git-subtree crate that is published independently.
 
-When keeping an upstream crate temporarily, wrap it behind a ConvexAutoBackup-owned API so we can later replace, fork, or constrain it without changing product code.
+Do not treat a wrapper as ownership by itself. A dependency is either replaced with first-party code, accepted as a normal upstream dependency because replacement is too risky, or scheduled for later replacement with an explicit exit condition.
 
 ## Owned Crate Policy
 
@@ -54,8 +54,8 @@ Candidate owned crates from this audit:
 | Candidate | Replaces | Classification | Publishing/Repo Shape | Scope |
 | --- | --- | --- | --- | --- |
 | Safe backup paths | `regex` for safe path/name validation | ConvexAutoBackup-specific unless generalized beyond backup paths. | Keep in main repo as local code or publish as `convex-autobackup-paths`. | Backup-safe relative paths, safe object-key segments, path traversal rejection. |
-| Static asset bundling | `mime_guess`, `rust-embed` | General-purpose if designed for any Rust web binary. | Separate git subtree with a non-Convex crate name; publish independently on crates.io. | Generated static asset manifests and content type lookup for bundled web UIs. |
-| Product error model | `anyhow`, `thiserror` over time | ConvexAutoBackup-specific. | Keep in main repo or publish under `convex-autobackup-*` only if multiple ConvexAutoBackup crates consume it. | Typed public API errors, internal context, and manual error implementations. |
+| Static asset bundling | `mime_guess`, `rust-embed` | Local for now; general-purpose later if extracted. | First-party build-generated code in the server crate. | Generated static asset manifests and content type lookup for bundled web UIs. |
+| Error model | `anyhow`, `thiserror` | General-purpose. | Standalone publishable `firstparty-error` crate. | Owned error/context primitives without derive macros or broad dependencies. |
 | Schedule grammar | `cron` if advanced cron is narrowed | General-purpose if it becomes a small reusable scheduler; Convex-specific if tied to backup policy. | General-purpose git subtree if reusable; otherwise main repo under ConvexAutoBackup scope. | Interval, daily, weekly, missed-run policy, and scoped cron-subset evaluation. |
 | CLI parser | `clap` later | ConvexAutoBackup-specific. | Main repo only unless a generic parser framework accidentally emerges, which is not the goal. | Stable ConvexAutoBackup command grammar after the public CLI settles. |
 | Encoding helpers | `hex`, `percent-encoding`, maybe narrow `base64` usage | General-purpose only if complete and well-scoped; otherwise local. | Prefer local modules first; separate non-Convex crate only if the APIs are useful outside this project. | Object key encoding, SigV4 canonical encoding, manifest-safe display helpers. |
@@ -67,25 +67,25 @@ These are the direct registry dependencies currently used by workspace crates. L
 
 | Dependency | Version | Rust LOC | Used By | Ownership Decision |
 | --- | ---: | ---: | --- | --- |
-| `dirs` | 6.0.0 | 445 | core, server, CLI, worker | Own now |
+| `dirs` | 6.0.0 | 445 | core, server, CLI, worker | Owned in Wave 1 |
 | `hmac` | 0.12.1 | 609 | core | Temporary upstream; keep behind owned S3 signer boundary |
 | `percent-encoding` | 2.3.2 | 696 | core | Own |
-| `rust-embed` | 8.11.0 | 811 | server | Own now |
+| `rust-embed` | 8.11.0 | 811 | server | Owned in Wave 1 |
 | `hex` | 0.4.3 | 823 | core | Own |
 | `subtle` | 2.6.1 | 1,442 | core | Temporary upstream; security exception |
 | `getrandom` | 0.2.17/0.3.4/0.4.3 | 2,026-2,986 | core | Temporary upstream; OS RNG exception |
-| `mime_guess` | 2.0.5 | 2,397 | server | Own now |
+| `mime_guess` | 2.0.5 | 2,397 | server | Owned in Wave 1 |
 | `sha2` | 0.10.9 | 2,433 | core | Temporary upstream; crypto primitive exception |
-| `thiserror` | 2.0.18 | 2,817 | core | Own |
+| `thiserror` | 2.0.18 | 2,817 | core | Owned in Wave 1 |
 | `argon2` | 0.5.3 | 2,865 | core | Temporary upstream; password-hashing exception |
-| `cron` | 0.17.0 | 3,276 | core | Own scoped version |
-| `async-trait` | 0.1.89 | 3,327 | core | Own via API refactor |
+| `cron` | 0.17.0 | 3,276 | core | Owned in Wave 1 |
+| `async-trait` | 0.1.89 | 3,327 | core | Owned in Wave 1 |
 | `clap` | 4.6.1 | 4,265 | CLI, worker | Own after command grammar stabilizes |
-| `anyhow` | 1.0.103 | 5,890 | all crates | Own |
+| `anyhow` | 1.0.103 | 5,890 | all crates | Owned in Wave 1 |
 | `base64` | 0.22.1 | 7,549 | core | Own if usage remains narrow |
 | `aes-gcm` | 0.11.0 | 7,816 | core | Temporary upstream; encryption exception |
 | `uuid` | 1.23.4 | 8,741 | core, server, CLI, worker | Own boundary first; consider owned ID type |
-| `regex` | 1.12.4 | 11,995 | core | Own now |
+| `regex` | 1.12.4 | 11,995 | core | Owned in Wave 1 |
 | `serde` | 1.0.228 | 17,331 | all crates | Temporary upstream; serialization compatibility exception |
 | `axum` | 0.8.9 | 19,775 | server, CLI | Temporary upstream; HTTP server exception |
 | `reqwest` | 0.13.4 | 20,133 | core | Temporary upstream; isolate behind owned storage boundary |
@@ -99,7 +99,7 @@ These are the direct registry dependencies currently used by workspace crates. L
 
 ## Own First
 
-These are safe, production-grade ownership candidates.
+These safe, production-grade ownership candidates are implemented in Wave 1. See `docs/DEPENDENCY_OWNERSHIP_ROLLOUT.md` for the rollout record.
 
 | Dependency | Current Use | Why Own | Ownership Plan | Risk |
 | --- | --- | --- | --- | --- |
