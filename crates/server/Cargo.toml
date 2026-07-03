@@ -13,7 +13,7 @@ categories = ["web-programming::http-server", "database"]
 
 [dependencies]
 axum.workspace = true
-convex-autobackup-core = { version = "=0.1.0-beta.3", path = "../core" }
+convex-autobackup-core = { version = "=0.1.0-beta.4", path = "../core" }
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

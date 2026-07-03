@@ -36,6 +36,14 @@ button {
   padding: 0.72rem 0.9rem;
 }
 
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+summary:focus-visible {
+  outline: 3px solid #9fb8d4;
+  outline-offset: 2px;
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.58;
@@ -62,9 +70,7 @@ code {
   padding: 0.65rem 0.75rem;
 }
 
-h1,
-h2,
-p {
+h1, h2, p {
   margin-top: 0;
 }
 
@@ -147,6 +153,7 @@ h2 {
 .metric p,
 .status-line span,
 .status-tile span,
+.inventory-row span,
 .resource-row span,
 .empty {
   color: #65736e;

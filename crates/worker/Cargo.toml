@@ -12,7 +12,7 @@ keywords = ["convex", "backup", "worker", "scheduler", "restore"]
 categories = ["command-line-utilities", "database"]
 
 [dependencies]
-convex-autobackup-core = { version = "=0.1.0-beta.3", path = "../core" }
+convex-autobackup-core = { version = "=0.1.0-beta.4", path = "../core" }
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true

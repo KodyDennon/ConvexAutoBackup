@@ -2,6 +2,7 @@ import { useState } from "react";
 import { DatabaseBackup, KeyRound, Lock } from "lucide-react";
 import { ApiClient, type ApiToken, type HealthResponse } from "../appState";
 import { Field, StatusLine, SystemMessages } from "./common";
+import "./auth.css";
 
 export function AuthShell({ health, children }: { health: HealthResponse | null; children: React.ReactNode }) {
   return (
@@ -20,6 +21,13 @@ export function AuthShell({ health, children }: { health: HealthResponse | null;
         <StatusLine label="Service" value={health?.status ?? "checking"} />
         <StatusLine label="Version" value={health?.version ?? "unknown"} />
         <StatusLine label="Database" value={health?.database_path ?? "not connected"} />
+        {health?.users_configured && (
+          <div className="access-recovery">
+            <strong>Need access?</strong>
+            <p>Sign in with the owner email and password created on this install. If that password is lost, create a new owner from the same server shell:</p>
+            <code>convex-autobackup user create --email owner@example.com --password "change-this-strong-password" --role owner --json</code>
+          </div>
+        )}
       </section>
     </main>
   );
@@ -118,7 +126,7 @@ export function LoginForm({
       }}
     >
       <h1>Sign in</h1>
-      <p className="subtle">Email/password login creates a revocable API token for this browser session.</p>
+      <p className="subtle">Use the owner or admin account for this install. Signing in creates a revocable token stored only in this browser.</p>
       <SystemMessages error={error} notice={notice} oneTimeToken={oneTimeToken} />
       <Field label="Email">
         <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />

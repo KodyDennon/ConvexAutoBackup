@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-beta.4
+
+- Reworked the web console setup page into a guided first-run flow that focuses on the next required backup task instead of showing every form at once.
+- Added a compact setup inventory and kept advanced manual configuration available behind an explicit disclosure.
+- Improved existing-install sign-in guidance with a local owner recovery command for LAN/server installs.
+- Rebuilt the embedded web bundle served by the Rust server.
+
 ## 0.1.0-beta.3
 
 - Released the first dependency ownership wave from the current mainline commit.

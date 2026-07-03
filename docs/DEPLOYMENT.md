@@ -7,13 +7,13 @@ For install commands and first-run setup, see [Installation](INSTALLATION.md). F
 Normal beta install:
 
 ```bash
-curl -fsSL https://github.com/KodyDennon/ConvexAutoBackup/releases/download/v0.1.0-beta.3/install.sh | sh
+curl -fsSL https://github.com/KodyDennon/ConvexAutoBackup/releases/download/v0.1.0-beta.4/install.sh | sh
 ```
 
 Windows:
 
 ```powershell
-iwr https://github.com/KodyDennon/ConvexAutoBackup/releases/download/v0.1.0-beta.3/install.ps1 -OutFile install.ps1
+iwr https://github.com/KodyDennon/ConvexAutoBackup/releases/download/v0.1.0-beta.4/install.ps1 -OutFile install.ps1
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
@@ -45,7 +45,7 @@ http://localhost:8976
 Normal beta install:
 
 ```bash
-curl -fsSL https://github.com/KodyDennon/ConvexAutoBackup/releases/download/v0.1.0-beta.3/docker-setup.sh | sh
+curl -fsSL https://github.com/KodyDennon/ConvexAutoBackup/releases/download/v0.1.0-beta.4/docker-setup.sh | sh
 ```
 
 Manual source build:
@@ -70,7 +70,7 @@ kodydoty/convex-autobackup
 Rust users can install the CLI from crates.io:
 
 ```bash
-cargo install convex-autobackup --version 0.1.0-beta.3
+cargo install convex-autobackup --version 0.1.0-beta.4
 convex-autobackup runner install --json
 convex-autobackup supervise
 ```

@@ -87,7 +87,7 @@ Use the deployment name from the configured target.
 
 ```bash
 rustup update stable
-cargo install convex-autobackup --version 0.1.0-beta.3
+cargo install convex-autobackup --version 0.1.0-beta.4
 ```
 
 If the release was just published, crates.io indexing can lag for a few minutes.

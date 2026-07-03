@@ -1,0 +1,13 @@
+.access-recovery {
+  background: #ffffff;
+  border: 1px solid #dce4dd;
+  border-radius: 8px;
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+}
+
+.access-recovery p {
+  color: #41504b;
+  margin-bottom: 0;
+}

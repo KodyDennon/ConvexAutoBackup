@@ -10,7 +10,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0-beta.3"
+version = "0.1.0-beta.4"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/KodyDennon/ConvexAutoBackup"
@@ -40,4 +40,4 @@ tower-http = { version = "0.7.0", features = ["cors", "trace"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 uuid = { version = "1.19.0", features = ["serde", "v7"] }
-firstparty-error = { version = "=0.1.0-beta.3", path = "crates/firstparty-error" }
+firstparty-error = { version = "=0.1.0-beta.4", path = "crates/firstparty-error" }

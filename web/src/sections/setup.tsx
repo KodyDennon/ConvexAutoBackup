@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activity, CheckCircle2, Clock3, DatabaseBackup, HardDrive, KeyRound, Play, Plus } from "lucide-react";
+import { Activity, CheckCircle2, DatabaseBackup, HardDrive, KeyRound, Play, Plus } from "lucide-react";
 import {
   ApiClient,
   destinationLabel,
@@ -7,11 +7,13 @@ import {
   type SecretKind,
   type ServiceState
 } from "../appState";
-import { secretKinds, weekdays } from "../constants";
+import { secretKinds } from "../constants";
 import { Field, ResourceForm, ResourceList, Select } from "../components/common";
+import { ScheduleForm } from "./setupScheduleForm";
 import "./setupGuide.css";
 
 type Perform = (key: string, action: () => Promise<string | null | undefined>) => Promise<void>;
+type SetupTask = "project" | "secret" | "target" | "destination" | "job" | "schedule" | "backup" | "complete";
 
 export function SetupSection({
   client,
@@ -24,18 +26,38 @@ export function SetupSection({
   actionLoading: string | null;
   perform: Perform;
 }) {
+  const activeTask = currentSetupTask(state);
+
   return (
     <div className="page-stack">
-      <SetupGuide client={client} state={state} actionLoading={actionLoading} perform={perform} />
+      <SetupGuide state={state} activeTask={activeTask} />
 
-      <section className="form-grid">
-        <ProjectForm client={client} actionLoading={actionLoading} perform={perform} />
-        <SecretForm client={client} actionLoading={actionLoading} perform={perform} />
-        <TargetForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
-        <DestinationForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
-        <JobForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
-        <ScheduleForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
+      <section className="setup-workspace">
+        <div className="setup-primary">
+          <CurrentSetupTask
+            task={activeTask}
+            client={client}
+            state={state}
+            actionLoading={actionLoading}
+            perform={perform}
+          />
+        </div>
+        <aside className="panel setup-summary">
+          <PanelSummary state={state} />
+        </aside>
       </section>
+
+      <details className="manual-config">
+        <summary>Manual configuration</summary>
+        <section className="form-grid">
+          <ProjectForm client={client} actionLoading={actionLoading} perform={perform} />
+          <SecretForm client={client} actionLoading={actionLoading} perform={perform} />
+          <TargetForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
+          <DestinationForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
+          <JobForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
+          <ScheduleForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
+        </section>
+      </details>
 
       <section className="split three">
         <ResourceList title="Projects" items={state.projects.map((project) => [project.name, project.description ?? project.id])} />
@@ -46,51 +68,82 @@ export function SetupSection({
   );
 }
 
-function SetupGuide({
+function currentSetupTask(state: ServiceState): SetupTask {
+  const latestRun = state.runs[0]?.run;
+  if (state.projects.length === 0) return "project";
+  if (state.targets.length === 0 && !state.secrets.some((secret) => secret.kind === "convex_deploy_key")) return "secret";
+  if (state.targets.length === 0) return "target";
+  if (state.destinations.length === 0) return "destination";
+  if (state.jobs.length === 0) return "job";
+  if (state.schedules.length === 0) return "schedule";
+  if (latestRun?.status !== "succeeded") return "backup";
+  return "complete";
+}
+
+function CurrentSetupTask({
+  task,
   client,
   state,
   actionLoading,
   perform
 }: {
+  task: SetupTask;
   client: ApiClient;
   state: ServiceState;
   actionLoading: string | null;
   perform: Perform;
 }) {
-  const latestRun = state.runs[0]?.run;
-  const firstJob = state.jobs[0];
-  const steps = [
-    { label: "Owner account", complete: state.users.length > 0, detail: "Admin access is configured" },
-    { label: "Convex target", complete: state.targets.length > 0, detail: "Deployment and deploy key are connected" },
-    { label: "Backup destination", complete: state.destinations.length > 0, detail: "Choose local filesystem or S3-compatible storage" },
-    { label: "Schedule", complete: state.schedules.length > 0, detail: "Automatic backups have a run cadence" },
-    { label: "First backup", complete: latestRun?.status === "succeeded", detail: latestRun ? `Latest run: ${latestRun.status}` : "Run and verify the first archive" }
-  ];
-  const completeCount = steps.filter((step) => step.complete).length;
-
-  return (
-    <section className="setup-guide">
-      <div className="setup-guide-header">
+  if (task === "project") {
+    return (
+      <TaskFrame title="Start with a project" detail="Name the Convex app or customer deployment you want protected.">
+        <ProjectForm client={client} actionLoading={actionLoading} perform={perform} />
+      </TaskFrame>
+    );
+  }
+  if (task === "secret") {
+    return (
+      <TaskFrame title="Store the Convex deploy key" detail="Use a deploy key with permission to export the target deployment. It is encrypted before being stored.">
+        <SecretForm client={client} actionLoading={actionLoading} perform={perform} />
+      </TaskFrame>
+    );
+  }
+  if (task === "target") {
+    return (
+      <TaskFrame title="Connect the Convex deployment" detail="Point the project at the Convex deployment name that should be exported.">
+        <TargetForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
+      </TaskFrame>
+    );
+  }
+  if (task === "destination") {
+    return (
+      <TaskFrame title="Choose where backups land" detail="Start with a local vault, then add S3-compatible offsite storage when you are ready.">
+        <DestinationForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
+      </TaskFrame>
+    );
+  }
+  if (task === "job") {
+    return (
+      <TaskFrame title="Create the backup job" detail="Bind the target and destination together into a runnable full backup.">
+        <JobForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
+      </TaskFrame>
+    );
+  }
+  if (task === "schedule") {
+    return (
+      <TaskFrame title="Automate the cadence" detail="Choose how often the service should check and run this backup job.">
+        <ScheduleForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
+      </TaskFrame>
+    );
+  }
+  if (task === "backup") {
+    const firstJob = state.jobs[0];
+    return (
+      <section className="panel setup-run-card">
         <div>
-          <p className="eyebrow">First-run protection path</p>
-          <h2>Get this deployment backed up</h2>
-          <p className="subtle">Work left to right: connect Convex, choose where backups live, schedule them, then run the first backup.</p>
+          <p className="eyebrow">Final setup step</p>
+          <h2>Run and verify the first backup</h2>
+          <p className="subtle">This proves the deploy key, Convex export runner, destination path, and manifest writing all work together.</p>
         </div>
-        <div className="setup-progress" aria-label={`${completeCount} of ${steps.length} setup steps complete`}>
-          <strong>{completeCount}/{steps.length}</strong>
-          <span>ready</span>
-        </div>
-      </div>
-      <div className="setup-rail">
-        {steps.map((step) => (
-          <div className={`setup-step ${step.complete ? "complete" : ""}`} key={step.label}>
-            <CheckCircle2 size={18} />
-            <strong>{step.label}</strong>
-            <span>{step.detail}</span>
-          </div>
-        ))}
-      </div>
-      <div className="setup-guide-actions">
         <button
           type="button"
           disabled={!firstJob || actionLoading === "first-backup"}
@@ -104,7 +157,101 @@ function SetupGuide({
         >
           <Play size={16} /> Run first backup
         </button>
-        <span className="subtle">Local and S3-compatible destinations are both supported in this beta.</span>
+      </section>
+    );
+  }
+  return (
+    <section className="panel setup-run-card complete">
+      <CheckCircle2 size={24} />
+      <div>
+        <p className="eyebrow">Protected</p>
+        <h2>Backups are configured</h2>
+        <p className="subtle">Use Runs for manual execution and restore verification, or DR Center for schedule and readiness checks.</p>
+      </div>
+    </section>
+  );
+}
+
+function TaskFrame({ title, detail, children }: { title: string; detail: string; children: React.ReactNode }) {
+  return (
+    <div className="task-frame">
+      <div className="task-frame-copy">
+        <p className="eyebrow">Current task</p>
+        <h2>{title}</h2>
+        <p className="subtle">{detail}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function PanelSummary({ state }: { state: ServiceState }) {
+  const rows = [
+    ["Projects", state.projects.length],
+    ["Deploy keys", state.secrets.filter((secret) => secret.kind === "convex_deploy_key").length],
+    ["Targets", state.targets.length],
+    ["Destinations", state.destinations.length],
+    ["Jobs", state.jobs.length],
+    ["Schedules", state.schedules.length]
+  ];
+
+  return (
+    <div className="stack compact">
+      <div>
+        <p className="eyebrow">Configured now</p>
+        <h2>Install inventory</h2>
+      </div>
+      <div className="inventory-list">
+        {rows.map(([label, value]) => (
+          <div className="inventory-row" key={label}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+          </div>
+        ))}
+      </div>
+      <p className="subtle">The setup flow only advances after the server confirms each saved resource.</p>
+    </div>
+  );
+}
+
+function SetupGuide({
+  state,
+  activeTask
+}: {
+  state: ServiceState;
+  activeTask: SetupTask;
+}) {
+  const latestRun = state.runs[0]?.run;
+  const steps = [
+    { id: "project", label: "Project", complete: state.projects.length > 0, detail: "Backup owner is named" },
+    { id: "target", label: "Convex target", complete: state.targets.length > 0, detail: "Deployment and deploy key are connected" },
+    { id: "destination", label: "Destination", complete: state.destinations.length > 0, detail: "Local or S3 vault is ready" },
+    { id: "schedule", label: "Schedule", complete: state.schedules.length > 0, detail: "Automatic cadence is set" },
+    { id: "backup", label: "First backup", complete: latestRun?.status === "succeeded", detail: latestRun ? `Latest run: ${latestRun.status}` : "Run and verify the first archive" }
+  ];
+  const completeCount = steps.filter((step) => step.complete).length;
+
+  return (
+    <section className="setup-guide">
+      <div className="setup-guide-header">
+        <div>
+          <p className="eyebrow">First-run protection path</p>
+          <h2>Get this deployment backed up</h2>
+          <p className="subtle">Complete the current task below. Manual configuration stays available for advanced edits.</p>
+        </div>
+        <div className="setup-progress" aria-label={`${completeCount} of ${steps.length} setup steps complete`}>
+          <strong>{completeCount}/{steps.length}</strong>
+          <span>ready</span>
+        </div>
+      </div>
+      <div className="setup-rail">
+        {steps.map((step) => (
+          <div className={`setup-step ${step.complete ? "complete" : ""} ${activeTask === step.id ? "active" : ""}`} key={step.label}>
+            <CheckCircle2 size={18} />
+            <strong>{step.label}</strong>
+            <span>{step.detail}</span>
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -412,90 +559,6 @@ function JobForm({ client, state, actionLoading, perform }: { client: ApiClient;
         <input checked={includeFileStorage} onChange={(event) => setIncludeFileStorage(event.target.checked)} type="checkbox" />
         Include Convex file storage
       </label>
-    </ResourceForm>
-  );
-}
-
-function ScheduleForm({ client, state, actionLoading, perform }: { client: ApiClient; state: ServiceState; actionLoading: string | null; perform: Perform }) {
-  const [jobId, setJobId] = useState("");
-  const [mode, setMode] = useState<"interval_minutes" | "daily" | "weekly" | "cron">("interval_minutes");
-  const [every, setEvery] = useState(60);
-  const [time, setTime] = useState("02:00:00");
-  const [weekday, setWeekday] = useState("Mon");
-  const [expression, setExpression] = useState("0 0 2 * * *");
-  const [missedRunPolicy, setMissedRunPolicy] = useState<"run_once_on_resume" | "skip">("run_once_on_resume");
-
-  useEffect(() => {
-    if (!jobId && state.jobs[0]) setJobId(state.jobs[0].id);
-  }, [jobId, state.jobs]);
-
-  return (
-    <ResourceForm
-      title="Schedule"
-      icon={<Clock3 size={18} />}
-      loading={actionLoading === "schedule"}
-      submitLabel="Create schedule"
-      onSubmit={() =>
-        perform("schedule", async () => {
-          const schedule =
-            mode === "interval_minutes"
-              ? { type: mode, every }
-              : mode === "daily"
-                ? { type: mode, time }
-                : mode === "weekly"
-                  ? { type: mode, weekday, time }
-                  : { type: mode, expression };
-          await client.request("/api/v1/schedules", {
-            method: "POST",
-            body: JSON.stringify({ job_id: jobId, schedule, missed_run_policy: missedRunPolicy, enabled: true })
-          });
-          return "Schedule created.";
-        })
-      }
-    >
-      <Field label="Job">
-        <Select value={jobId} onChange={setJobId} items={state.jobs.map((job) => [job.id, job.name])} required />
-      </Field>
-      <Field label="Mode">
-        <select value={mode} onChange={(event) => setMode(event.target.value as "interval_minutes" | "daily" | "weekly" | "cron")}>
-          <option value="interval_minutes">Interval</option>
-          <option value="daily">Daily</option>
-          <option value="weekly">Weekly</option>
-          <option value="cron">Cron</option>
-        </select>
-      </Field>
-      {mode === "interval_minutes" && (
-        <Field label="Every minutes">
-          <input value={every} onChange={(event) => setEvery(Number(event.target.value))} min={1} type="number" required />
-        </Field>
-      )}
-      {(mode === "daily" || mode === "weekly") && (
-        <Field label="UTC time">
-          <input value={time} onChange={(event) => setTime(event.target.value)} pattern="^[0-2][0-9]:[0-5][0-9]:[0-5][0-9]$" required />
-        </Field>
-      )}
-      {mode === "weekly" && (
-        <Field label="Weekday">
-          <select value={weekday} onChange={(event) => setWeekday(event.target.value)}>
-            {weekdays.map((day) => (
-              <option key={day} value={day}>
-                {day}
-              </option>
-            ))}
-          </select>
-        </Field>
-      )}
-      {mode === "cron" && (
-        <Field label="Cron expression">
-          <input value={expression} onChange={(event) => setExpression(event.target.value)} required />
-        </Field>
-      )}
-      <Field label="Missed runs">
-        <select value={missedRunPolicy} onChange={(event) => setMissedRunPolicy(event.target.value as "run_once_on_resume" | "skip")}>
-          <option value="run_once_on_resume">Run once on resume</option>
-          <option value="skip">Skip missed runs</option>
-        </select>
-      </Field>
     </ResourceForm>
   );
 }
