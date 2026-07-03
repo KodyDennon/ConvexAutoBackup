@@ -37,7 +37,7 @@ sha2 = "0.10.9"
 subtle = "2.6.1"
 thiserror = "2.0.17"
 tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread", "signal", "process", "fs", "time"] }
-tower-http = { version = "0.6.7", features = ["cors", "fs", "trace"] }
+tower-http = { version = "0.7.0", features = ["cors", "fs", "trace"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 uuid = { version = "1.19.0", features = ["serde", "v7"] }
