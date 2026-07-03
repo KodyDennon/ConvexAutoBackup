@@ -1,21 +1,27 @@
+mod metadata;
+#[cfg(test)]
+mod tests;
+
 use axum::{
     Json, Router,
     extract::{Path, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use convex_autobackup_core::{
     AppDatabase, AuthService, BackupEngine, CommandConvexExporter, CommandConvexImporter,
     CreateCloudTarget, CreateJobSchedule, CreateLocalDestination, CreateProject,
     CreateS3Destination, CreateScheduledJob, CreateUser, RestoreEngine, Role, SchedulerService,
-    SecretKind, SecretVault, User, generate_dr_report, verify_run,
+    SecretKind, SecretVault, User, generate_dr_report, list_secret_metadata, verify_run,
 };
 use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::Arc};
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use uuid::Uuid;
+
+use metadata::{capabilities, openapi_spec};
 
 #[derive(RustEmbed)]
 #[folder = "../../web/dist"]
@@ -61,13 +67,21 @@ pub fn router_with_state(state: AppState) -> Router {
         .route("/api/v1/openapi.json", get(openapi_spec))
         .route("/api/v1/capabilities", get(capabilities))
         .route("/api/v1/bootstrap", post(bootstrap_owner))
-        .route("/api/v1/tokens", post(create_api_token))
+        .route("/api/v1/login", post(login))
+        .route("/api/v1/users", get(list_users).post(create_user))
+        .route(
+            "/api/v1/tokens",
+            get(list_api_tokens).post(create_api_token),
+        )
+        .route("/api/v1/tokens/{token_id}", delete(revoke_api_token))
         .route("/api/v1/secrets", get(list_secrets).post(put_secret))
         .route("/api/v1/projects", get(list_projects).post(create_project))
+        .route("/api/v1/targets", get(list_targets))
         .route("/api/v1/targets/cloud", post(create_cloud_target))
+        .route("/api/v1/destinations", get(list_destinations))
         .route("/api/v1/destinations/local", post(create_local_destination))
         .route("/api/v1/destinations/s3", post(create_s3_destination))
-        .route("/api/v1/jobs", post(create_job))
+        .route("/api/v1/jobs", get(list_jobs).post(create_job))
         .route(
             "/api/v1/schedules",
             get(list_schedules).post(create_schedule),
@@ -116,45 +130,6 @@ async fn health(State(state): State<Arc<AppState>>) -> Result<Json<HealthRespons
     }))
 }
 
-async fn openapi_spec() -> Json<serde_json::Value> {
-    Json(serde_json::json!({
-        "openapi": "3.1.0",
-        "info": {"title": "ConvexAutoBackup API", "version": env!("CARGO_PKG_VERSION")},
-        "paths": {
-            "/api/v1/health": {"get": {"summary": "Service health"}},
-            "/api/v1/bootstrap": {"post": {"summary": "Create first owner"}},
-            "/api/v1/tokens": {"post": {"summary": "Create API token"}},
-            "/api/v1/secrets": {"get": {"summary": "List encrypted secret metadata"}, "post": {"summary": "Store encrypted secret"}},
-            "/api/v1/projects": {"get": {"summary": "List projects"}, "post": {"summary": "Create project"}},
-            "/api/v1/targets/cloud": {"post": {"summary": "Create Convex Cloud target"}},
-            "/api/v1/destinations/local": {"post": {"summary": "Create local filesystem destination"}},
-            "/api/v1/destinations/s3": {"post": {"summary": "Create S3-compatible destination"}},
-            "/api/v1/jobs": {"post": {"summary": "Create backup job"}},
-            "/api/v1/schedules": {"get": {"summary": "List schedules"}, "post": {"summary": "Create schedule"}},
-            "/api/v1/schedules/run-due": {"post": {"summary": "Run due schedules"}},
-            "/api/v1/runs/{run_id}/verify": {"post": {"summary": "Verify backup run"}},
-            "/api/v1/restore": {"post": {"summary": "Restore verified backup run"}},
-            "/api/v1/dr/report": {"get": {"summary": "Generate DR evidence report"}},
-            "/api/v1/audit": {"get": {"summary": "List audit events"}},
-            "/api/v1/jobs/{job_id}/run": {"post": {"summary": "Run backup job"}},
-            "/api/v1/runs": {"get": {"summary": "List backup runs"}}
-        }
-    }))
-}
-
-async fn capabilities() -> Json<serde_json::Value> {
-    Json(serde_json::json!({
-        "convex_targets": ["cloud", "self_hosted"],
-        "storage_destinations": ["local_filesystem", "s3_compatible"],
-        "schedule_modes": ["interval_minutes", "daily", "weekly", "cron"],
-        "backup_defaults": {"include_file_storage": true, "missed_run_policy": "run_once_on_resume"},
-        "agent_interfaces": ["cli_json", "http_api", "mcp_stdio"],
-        "database_modes": ["sqlite"],
-        "secret_backends": ["encrypted_database", "environment_reference"],
-        "implemented_api_resources": ["bootstrap", "tokens", "secrets", "projects", "targets", "destinations", "jobs", "schedules", "runs"]
-    }))
-}
-
 async fn bootstrap_owner(
     State(state): State<Arc<AppState>>,
     Json(input): Json<CreateUser>,
@@ -168,6 +143,25 @@ async fn bootstrap_owner(
         ..input
     })?;
     let api_token = auth.create_api_token(user.id, "bootstrap")?;
+    Ok(Json(serde_json::json!({
+        "user": user,
+        "api_token": api_token
+    })))
+}
+
+#[derive(Debug, Deserialize)]
+struct LoginRequest {
+    email: String,
+    password: String,
+}
+
+async fn login(
+    State(state): State<Arc<AppState>>,
+    Json(input): Json<LoginRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let auth = AuthService::new(state.database.clone());
+    let user = auth.verify_password(&input.email, &input.password)?;
+    let api_token = auth.create_api_token(user.id, "web-login")?;
     Ok(Json(serde_json::json!({
         "user": user,
         "api_token": api_token
@@ -189,6 +183,52 @@ async fn create_api_token(
     let auth = AuthService::new(state.database.clone());
     Ok(Json(serde_json::json!({
         "api_token": auth.create_api_token(input.user_id, &input.name)?
+    })))
+}
+
+async fn list_users(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_role(&state, &headers, RoleRequirement::Manage)?;
+    let auth = AuthService::new(state.database.clone());
+    Ok(Json(serde_json::json!({
+        "users": auth.list_users()?
+    })))
+}
+
+async fn create_user(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(input): Json<CreateUser>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_role(&state, &headers, RoleRequirement::Manage)?;
+    let auth = AuthService::new(state.database.clone());
+    Ok(Json(serde_json::json!({
+        "user": auth.create_user(input)?
+    })))
+}
+
+async fn list_api_tokens(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_role(&state, &headers, RoleRequirement::Manage)?;
+    let auth = AuthService::new(state.database.clone());
+    Ok(Json(serde_json::json!({
+        "api_tokens": auth.list_api_tokens()?
+    })))
+}
+
+async fn revoke_api_token(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(token_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_role(&state, &headers, RoleRequirement::Manage)?;
+    let auth = AuthService::new(state.database.clone());
+    Ok(Json(serde_json::json!({
+        "api_token": auth.revoke_api_token(token_id)?
     })))
 }
 
@@ -216,9 +256,8 @@ async fn list_secrets(
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_role(&state, &headers, RoleRequirement::Manage)?;
-    let vault = SecretVault::from_env(state.database.clone())?;
     Ok(Json(
-        serde_json::json!({ "secrets": vault.list_secrets()? }),
+        serde_json::json!({ "secrets": list_secret_metadata(&state.database)? }),
     ))
 }
 
@@ -254,6 +293,16 @@ async fn create_cloud_target(
     ))
 }
 
+async fn list_targets(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_role(&state, &headers, RoleRequirement::Authenticated)?;
+    Ok(Json(serde_json::json!({
+        "targets": state.database.list_targets()?
+    })))
+}
+
 async fn create_local_destination(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -265,6 +314,16 @@ async fn create_local_destination(
     ))
 }
 
+async fn list_destinations(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_role(&state, &headers, RoleRequirement::Authenticated)?;
+    Ok(Json(serde_json::json!({
+        "destinations": state.database.list_destinations()?
+    })))
+}
+
 async fn create_s3_destination(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -274,6 +333,16 @@ async fn create_s3_destination(
     Ok(Json(
         serde_json::json!({ "destination": state.database.create_s3_destination(input)? }),
     ))
+}
+
+async fn list_jobs(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_role(&state, &headers, RoleRequirement::Authenticated)?;
+    Ok(Json(serde_json::json!({
+        "jobs": state.database.list_jobs()?
+    })))
 }
 
 async fn create_job(
@@ -496,138 +565,4 @@ fn default_data_dir() -> PathBuf {
                 .unwrap_or_else(|| PathBuf::from("."))
                 .join("convex-autobackup")
         })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use axum::body::Body;
-    use axum::http::{Request, StatusCode, header};
-    use tower::ServiceExt;
-
-    fn test_router() -> Router {
-        let dir = std::env::temp_dir().join(format!("convex-autobackup-test-{}", Uuid::now_v7()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let state = AppState {
-            version: env!("CARGO_PKG_VERSION"),
-            database: AppDatabase::open(dir.join("app.db")).unwrap(),
-            staging_dir: dir.join("staging"),
-        };
-        router_with_state(state)
-    }
-
-    #[tokio::test]
-    async fn health_endpoint_returns_ok_payload() {
-        let response = test_router()
-            .oneshot(
-                Request::builder()
-                    .uri("/api/v1/health")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn projects_require_bearer_token_after_bootstrap() {
-        let response = test_router()
-            .oneshot(
-                Request::builder()
-                    .uri("/api/v1/projects")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    }
-
-    #[tokio::test]
-    async fn bootstrap_token_and_project_api_flow() {
-        let app = test_router();
-        let bootstrap_response = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/bootstrap")
-                    .header(header::CONTENT_TYPE, "application/json")
-                    .body(Body::from(
-                        serde_json::json!({
-                            "email": "owner@example.com",
-                            "password": "very-secure-password",
-                            "role": "viewer"
-                        })
-                        .to_string(),
-                    ))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(bootstrap_response.status(), StatusCode::OK);
-        let bootstrap_body = axum::body::to_bytes(bootstrap_response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let bootstrap_json: serde_json::Value = serde_json::from_slice(&bootstrap_body).unwrap();
-        let user_id = bootstrap_json["user"]["id"].as_str().unwrap();
-        let token = bootstrap_json["api_token"]["token"].as_str().unwrap();
-
-        let token_response = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/tokens")
-                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                    .header(header::CONTENT_TYPE, "application/json")
-                    .body(Body::from(
-                        serde_json::json!({
-                            "user_id": user_id,
-                            "name": "api-test"
-                        })
-                        .to_string(),
-                    ))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(token_response.status(), StatusCode::OK);
-
-        let create_project_response = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/v1/projects")
-                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                    .header(header::CONTENT_TYPE, "application/json")
-                    .body(Body::from(
-                        serde_json::json!({
-                            "name": "API Project",
-                            "description": "created in integration test"
-                        })
-                        .to_string(),
-                    ))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(create_project_response.status(), StatusCode::OK);
-
-        let list_projects_response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/api/v1/projects")
-                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(list_projects_response.status(), StatusCode::OK);
-    }
 }

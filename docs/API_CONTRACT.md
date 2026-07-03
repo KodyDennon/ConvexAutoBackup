@@ -12,14 +12,22 @@ The HTTP API is versioned under:
 - `GET /api/v1/capabilities`
 - `GET /api/v1/openapi.json`
 - `POST /api/v1/bootstrap`
+- `POST /api/v1/login`
+- `GET /api/v1/users`
+- `POST /api/v1/users`
+- `GET /api/v1/tokens`
 - `POST /api/v1/tokens`
+- `DELETE /api/v1/tokens/{token_id}`
 - `GET /api/v1/secrets`
 - `POST /api/v1/secrets`
 - `GET /api/v1/projects`
 - `POST /api/v1/projects`
+- `GET /api/v1/targets`
 - `POST /api/v1/targets/cloud`
+- `GET /api/v1/destinations`
 - `POST /api/v1/destinations/local`
 - `POST /api/v1/destinations/s3`
+- `GET /api/v1/jobs`
 - `POST /api/v1/jobs`
 - `GET /api/v1/schedules`
 - `POST /api/v1/schedules`
@@ -33,9 +41,11 @@ The HTTP API is versioned under:
 
 ## Future Resource Groups
 
-Browser sessions, scoped token permissions, logs, settings, and Postgres administration are roadmap resource groups.
+Scoped token permissions, logs, settings, and Postgres administration are roadmap resource groups.
 
 `POST /api/v1/bootstrap` is available only before any user exists. It creates the first owner and returns a one-time bootstrap API token.
+
+`POST /api/v1/login` validates email/password credentials and returns a revocable API token for browser or agent use.
 
 ## Rules
 

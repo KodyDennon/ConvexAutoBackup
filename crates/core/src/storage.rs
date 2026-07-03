@@ -101,7 +101,10 @@ pub fn store_local_backup(
     std::fs::rename(&tmp_archive, &archive_path)
         .with_context(|| format!("failed to commit {}", archive_path.display()))?;
 
-    let manifest_json = serde_json::to_vec_pretty(manifest)?;
+    let storage_uri = format!("file://{}", archive_path.display());
+    let mut stored_manifest = manifest.clone();
+    stored_manifest.storage_uri.clone_from(&storage_uri);
+    let manifest_json = serde_json::to_vec_pretty(&stored_manifest)?;
     let tmp_manifest = manifest_path.with_extension("json.tmp");
     std::fs::write(&tmp_manifest, manifest_json)
         .with_context(|| format!("failed to write {}", tmp_manifest.display()))?;
@@ -109,7 +112,7 @@ pub fn store_local_backup(
         .with_context(|| format!("failed to commit {}", manifest_path.display()))?;
 
     Ok(StoredBackup {
-        storage_uri: format!("file://{}", archive_path.display()),
+        storage_uri,
         archive_path,
         manifest_path,
     })
@@ -217,6 +220,9 @@ pub async fn store_s3_backup(
     let base_key = object_key(prefix.as_deref(), project_name, deployment);
     let archive_key = format!("{base_key}/{archive_name}");
     let manifest_key = format!("{base_key}/{manifest_name}");
+    let storage_uri = format!("s3://{bucket}/{archive_key}");
+    let mut stored_manifest = manifest.clone();
+    stored_manifest.storage_uri.clone_from(&storage_uri);
 
     store
         .put(
@@ -228,7 +234,7 @@ pub async fn store_s3_backup(
     store
         .put(
             &ObjectPath::from(manifest_key.as_str()),
-            serde_json::to_vec_pretty(manifest)?.into(),
+            serde_json::to_vec_pretty(&stored_manifest)?.into(),
         )
         .await
         .context("failed to upload S3 manifest")?;
@@ -236,7 +242,7 @@ pub async fn store_s3_backup(
     Ok(StoredBackup {
         archive_path: PathBuf::from(&archive_key),
         manifest_path: PathBuf::from(&manifest_key),
-        storage_uri: format!("s3://{bucket}/{archive_key}"),
+        storage_uri,
     })
 }
 
@@ -347,7 +353,7 @@ mod tests {
             started_at,
             finished_at: started_at,
             duration_seconds: 0,
-            storage_uri: "pending".to_string(),
+            storage_uri: "preupload://test-run".to_string(),
         };
 
         let stored = store_local_backup(
@@ -360,11 +366,9 @@ mod tests {
         .unwrap();
 
         assert_eq!(std::fs::read(&stored.archive_path).unwrap(), b"bytes");
-        assert!(
-            std::fs::read_to_string(&stored.manifest_path)
-                .unwrap()
-                .contains("careful-otter")
-        );
+        let manifest_json = std::fs::read_to_string(&stored.manifest_path).unwrap();
+        assert!(manifest_json.contains("careful-otter"));
+        assert!(manifest_json.contains(&stored.storage_uri));
     }
 
     #[test]

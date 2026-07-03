@@ -33,6 +33,15 @@ pub struct ApiToken {
     pub created_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ApiTokenMetadata {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub name: String,
+    pub created_at: DateTime<Utc>,
+    pub revoked_at: Option<DateTime<Utc>>,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
@@ -95,6 +104,41 @@ impl AuthService {
             &format!("created user {}", user.email),
         )?;
         Ok(user)
+    }
+
+    pub fn list_users(&self) -> anyhow::Result<Vec<User>> {
+        let connection = self.database.connection()?;
+        let mut statement = connection
+            .prepare("SELECT id, email, role, created_at FROM users ORDER BY created_at ASC")?;
+        let rows = statement.query_map([], |row| {
+            Ok(User {
+                id: Uuid::parse_str(&row.get::<_, String>(0)?).map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Text,
+                        error.into(),
+                    )
+                })?,
+                email: row.get(1)?,
+                role: role_from_str(&row.get::<_, String>(2)?).map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        2,
+                        rusqlite::types::Type::Text,
+                        error.into(),
+                    )
+                })?,
+                created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(3)?)
+                    .map_err(|error| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            3,
+                            rusqlite::types::Type::Text,
+                            error.into(),
+                        )
+                    })?
+                    .with_timezone(&Utc),
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
     pub fn verify_password(&self, email: &str, password: &str) -> anyhow::Result<User> {
@@ -160,6 +204,90 @@ impl AuthService {
         Ok(token)
     }
 
+    pub fn list_api_tokens(&self) -> anyhow::Result<Vec<ApiTokenMetadata>> {
+        let connection = self.database.connection()?;
+        let mut statement = connection.prepare(
+            "SELECT id, user_id, name, created_at, revoked_at FROM api_tokens ORDER BY created_at DESC",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok(ApiTokenMetadata {
+                id: Uuid::parse_str(&row.get::<_, String>(0)?).map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Text,
+                        error.into(),
+                    )
+                })?,
+                user_id: Uuid::parse_str(&row.get::<_, String>(1)?).map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        1,
+                        rusqlite::types::Type::Text,
+                        error.into(),
+                    )
+                })?,
+                name: row.get(2)?,
+                created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(3)?)
+                    .map_err(|error| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            3,
+                            rusqlite::types::Type::Text,
+                            error.into(),
+                        )
+                    })?
+                    .with_timezone(&Utc),
+                revoked_at: row
+                    .get::<_, Option<String>>(4)?
+                    .map(|value| {
+                        DateTime::parse_from_rfc3339(&value).map(|dt| dt.with_timezone(&Utc))
+                    })
+                    .transpose()
+                    .map_err(|error| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            4,
+                            rusqlite::types::Type::Text,
+                            error.into(),
+                        )
+                    })?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    pub fn revoke_api_token(&self, token_id: Uuid) -> anyhow::Result<ApiTokenMetadata> {
+        let connection = self.database.connection()?;
+        let existing = connection
+            .query_row(
+                "SELECT id, user_id, name, created_at, revoked_at FROM api_tokens WHERE id = ?1",
+                params![token_id.to_string()],
+                token_metadata_from_row,
+            )
+            .optional()?
+            .ok_or_else(|| anyhow!("API token {token_id} does not exist"))?;
+
+        if existing.revoked_at.is_none() {
+            let revoked_at = Utc::now();
+            connection.execute(
+                "UPDATE api_tokens SET revoked_at = ?1 WHERE id = ?2",
+                params![revoked_at.to_rfc3339(), token_id.to_string()],
+            )?;
+            self.database.record_audit(
+                "system",
+                "token.revoke",
+                "api_token",
+                Some(token_id),
+                &format!("revoked API token {}", existing.name),
+            )?;
+        }
+
+        connection
+            .query_row(
+                "SELECT id, user_id, name, created_at, revoked_at FROM api_tokens WHERE id = ?1",
+                params![token_id.to_string()],
+                token_metadata_from_row,
+            )
+            .map_err(Into::into)
+    }
+
     pub fn authenticate_token(&self, raw: &str) -> anyhow::Result<User> {
         let hash = token_hash(raw);
         let connection = self.database.connection()?;
@@ -208,6 +336,38 @@ impl AuthService {
         }
         Ok(())
     }
+}
+
+fn token_metadata_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ApiTokenMetadata> {
+    Ok(ApiTokenMetadata {
+        id: Uuid::parse_str(&row.get::<_, String>(0)?).map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, error.into())
+        })?,
+        user_id: Uuid::parse_str(&row.get::<_, String>(1)?).map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(1, rusqlite::types::Type::Text, error.into())
+        })?,
+        name: row.get(2)?,
+        created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(3)?)
+            .map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    3,
+                    rusqlite::types::Type::Text,
+                    error.into(),
+                )
+            })?
+            .with_timezone(&Utc),
+        revoked_at: row
+            .get::<_, Option<String>>(4)?
+            .map(|value| DateTime::parse_from_rfc3339(&value).map(|dt| dt.with_timezone(&Utc)))
+            .transpose()
+            .map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    4,
+                    rusqlite::types::Type::Text,
+                    error.into(),
+                )
+            })?,
+    })
 }
 
 fn hash_password(password: &str) -> anyhow::Result<String> {

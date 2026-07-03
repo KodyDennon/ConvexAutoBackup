@@ -126,49 +126,53 @@ impl SecretVault {
     }
 
     pub fn list_secrets(&self) -> anyhow::Result<Vec<StoredSecret>> {
-        let connection = self.database.connection()?;
-        let mut statement = connection.prepare(
-            "SELECT id, label, kind, created_at, updated_at FROM secrets ORDER BY created_at ASC",
-        )?;
-        let rows = statement.query_map([], |row| {
-            Ok(StoredSecret {
-                id: Uuid::parse_str(&row.get::<_, String>(0)?).map_err(|error| {
-                    rusqlite::Error::FromSqlConversionFailure(
-                        0,
-                        rusqlite::types::Type::Text,
-                        error.into(),
-                    )
-                })?,
-                label: row.get(1)?,
-                kind: kind_from_str(&row.get::<_, String>(2)?).map_err(|error| {
-                    rusqlite::Error::FromSqlConversionFailure(
-                        2,
-                        rusqlite::types::Type::Text,
-                        error.into(),
-                    )
-                })?,
-                created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(3)?)
-                    .map_err(|error| {
-                        rusqlite::Error::FromSqlConversionFailure(
-                            3,
-                            rusqlite::types::Type::Text,
-                            error.into(),
-                        )
-                    })?
-                    .with_timezone(&Utc),
-                updated_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(4)?)
-                    .map_err(|error| {
-                        rusqlite::Error::FromSqlConversionFailure(
-                            4,
-                            rusqlite::types::Type::Text,
-                            error.into(),
-                        )
-                    })?
-                    .with_timezone(&Utc),
-            })
-        })?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        list_secret_metadata(&self.database)
     }
+}
+
+pub fn list_secret_metadata(database: &AppDatabase) -> anyhow::Result<Vec<StoredSecret>> {
+    let connection = database.connection()?;
+    let mut statement = connection.prepare(
+        "SELECT id, label, kind, created_at, updated_at FROM secrets ORDER BY created_at ASC",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok(StoredSecret {
+            id: Uuid::parse_str(&row.get::<_, String>(0)?).map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    0,
+                    rusqlite::types::Type::Text,
+                    error.into(),
+                )
+            })?,
+            label: row.get(1)?,
+            kind: kind_from_str(&row.get::<_, String>(2)?).map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    2,
+                    rusqlite::types::Type::Text,
+                    error.into(),
+                )
+            })?,
+            created_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(3)?)
+                .map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        3,
+                        rusqlite::types::Type::Text,
+                        error.into(),
+                    )
+                })?
+                .with_timezone(&Utc),
+            updated_at: DateTime::parse_from_rfc3339(&row.get::<_, String>(4)?)
+                .map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        4,
+                        rusqlite::types::Type::Text,
+                        error.into(),
+                    )
+                })?
+                .with_timezone(&Utc),
+        })
+    })?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
 }
 
 fn kind_to_str(kind: &SecretKind) -> &'static str {

@@ -63,8 +63,8 @@ The storage contract requires:
 
 ## UI
 
-The React UI is a local/LAN operations console. It consumes the same HTTP API used by agents and must not contain privileged business logic that bypasses server authorization.
+The React UI is a local/LAN operations console. It consumes the same HTTP API used by agents and must not contain privileged business logic that bypasses server authorization. It implements first-run owner creation, login, resource setup, backup execution, verification, guarded restore, DR reporting, audit review, user management, and API token management.
 
 ## Agent Surfaces
 
-The CLI and HTTP API are wired to the same SQLite, auth, secret, scheduler, backup, verification, and restore logic. The MCP server currently exposes health and capabilities tools. Browser session UX is still pending, but API bearer-token auth is active.
+The CLI, HTTP API, and bundled UI are wired to the same SQLite, auth, secret, scheduler, backup, verification, and restore logic. The MCP server currently exposes health and capabilities tools. API bearer-token auth is active for automation and browser-created tokens.

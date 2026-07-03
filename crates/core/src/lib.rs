@@ -13,7 +13,7 @@ pub mod secrets;
 pub mod storage;
 pub mod verify;
 
-pub use auth::{ApiToken, AuthService, CreateUser, Role, User};
+pub use auth::{ApiToken, ApiTokenMetadata, AuthService, CreateUser, Role, User};
 pub use backup::{BackupEngine, BackupRunResult};
 pub use convex::{
     CommandConvexExporter, CommandConvexImporter, ConvexExporter, ConvexImporter, ExportRequest,
@@ -32,5 +32,5 @@ pub use models::{
 pub use restore::{RestoreEngine, RestoreResult};
 pub use schedule::{MissedRunPolicy, Schedule, ScheduleError};
 pub use scheduler::{CreateJobSchedule, DueJobSchedule, SchedulerService};
-pub use secrets::{SecretKind, SecretVault, StoredSecret};
+pub use secrets::{SecretKind, SecretVault, StoredSecret, list_secret_metadata};
 pub use verify::{VerificationResult, verify_run};

@@ -22,10 +22,10 @@ convex-autobackup
 - `user`: create users.
 - `token`: create API tokens.
 - `secret`: store and list encrypted secrets.
-- `projects`: manage project records.
-- `targets`: manage Convex targets.
-- `destinations`: manage local and S3-compatible destinations.
-- `jobs`: manage backup jobs.
+- `project`: manage project records.
+- `target`: manage Convex targets.
+- `destination`: manage local and S3-compatible destinations.
+- `job`: manage backup jobs.
 - `schedule`: create/list schedules and run due jobs.
 - `backup`: trigger backup runs.
 - `verify`: verify backup archives and manifests.

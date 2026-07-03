@@ -19,6 +19,8 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - name: Install web dependencies
         run: npm --prefix web ci
+      - name: Check source file size
+        run: ./scripts/ci/check-file-lines.sh 600
       - name: Build embedded web UI
         run: npm --prefix web run build
       - uses: dtolnay/rust-toolchain@stable

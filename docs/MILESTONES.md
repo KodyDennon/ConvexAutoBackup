@@ -38,7 +38,7 @@ Acceptance:
 Acceptance:
 
 - Users and roles enforce server-side authorization.
-- API tokens can be scoped and revoked.
+- API tokens can be created, listed, authenticated, and revoked.
 - OS keychain backend works where available.
 - Encrypted database secret backend works in Docker/headless mode.
 - Audit log records security-relevant actions.

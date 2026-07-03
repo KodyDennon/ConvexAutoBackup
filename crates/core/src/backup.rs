@@ -77,7 +77,7 @@ impl BackupEngine {
                 archive_bytes: archive_bytes.clone(),
                 started_at,
                 finished_at,
-                storage_uri: "pending".to_string(),
+                storage_uri: format!("preupload://{}", run.id),
             });
             let stored = store_backup(
                 &self.database,

@@ -1,4 +1,4 @@
-.PHONY: setup build test check fmt lint web-build web-test serve worker-policy mcp-health
+.PHONY: setup build test check fmt lint repo-size web-build web-test serve worker-policy mcp-health
 
 setup:
 	npm --prefix web install
@@ -11,7 +11,7 @@ test: web-build
 	cargo test --workspace --all-targets
 	npm --prefix web test -- --run
 
-check: web-build
+check: repo-size web-build
 	cargo fmt --all -- --check
 	cargo clippy --workspace --all-targets -- -D warnings
 	cargo test --workspace --all-targets
@@ -22,6 +22,9 @@ fmt:
 
 lint:
 	cargo clippy --workspace --all-targets -- -D warnings
+
+repo-size:
+	./scripts/ci/check-file-lines.sh 600
 
 web-build:
 	npm --prefix web run build
