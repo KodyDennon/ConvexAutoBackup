@@ -372,7 +372,7 @@ fn token_metadata_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ApiToken
 
 fn hash_password(password: &str) -> anyhow::Result<String> {
     let mut salt_bytes = [0_u8; 16];
-    getrandom::getrandom(&mut salt_bytes)
+    getrandom::fill(&mut salt_bytes)
         .map_err(|error| anyhow!("failed to generate password salt: {error}"))?;
     let salt = SaltString::encode_b64(&salt_bytes)
         .map_err(|error| anyhow!("invalid password salt: {error}"))?;
@@ -392,7 +392,7 @@ fn verify_password_hash(password: &str, encoded: &str) -> anyhow::Result<()> {
 
 fn new_token() -> String {
     let mut bytes = [0_u8; 32];
-    getrandom::getrandom(&mut bytes).expect("system random source is available");
+    getrandom::fill(&mut bytes).expect("system random source is available");
     format!("cab_{}", URL_SAFE_NO_PAD.encode(bytes))
 }
 

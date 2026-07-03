@@ -1,7 +1,7 @@
 use crate::db::AppDatabase;
 use aes_gcm::{
-    Aes256Gcm, Nonce,
-    aead::{Aead, KeyInit},
+    Aes256Gcm,
+    aead::{Aead, KeyInit, Nonce},
 };
 use anyhow::{Context, anyhow};
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -62,12 +62,14 @@ impl SecretVault {
             return Err(anyhow!("secret value is required"));
         }
         let mut nonce_bytes = [0_u8; 12];
-        getrandom::getrandom(&mut nonce_bytes)
+        getrandom::fill(&mut nonce_bytes)
             .map_err(|error| anyhow!("failed to generate secret nonce: {error}"))?;
+        let nonce = Nonce::<Aes256Gcm>::try_from(&nonce_bytes[..])
+            .map_err(|_| anyhow!("failed to construct secret nonce"))?;
         let cipher = Aes256Gcm::new_from_slice(&self.key)
             .map_err(|error| anyhow!("failed to initialize secret cipher: {error}"))?;
         let ciphertext = cipher
-            .encrypt(Nonce::from_slice(&nonce_bytes), plaintext.as_bytes())
+            .encrypt(&nonce, plaintext.as_bytes())
             .map_err(|error| anyhow!("failed to encrypt secret: {error}"))?;
         let now = Utc::now();
         let stored = StoredSecret {
@@ -117,10 +119,12 @@ impl SecretVault {
         let ciphertext = STANDARD
             .decode(row.1)
             .context("stored secret ciphertext is not base64")?;
+        let nonce = Nonce::<Aes256Gcm>::try_from(nonce.as_slice())
+            .map_err(|_| anyhow!("stored secret nonce has invalid length"))?;
         let cipher = Aes256Gcm::new_from_slice(&self.key)
             .map_err(|error| anyhow!("failed to initialize secret cipher: {error}"))?;
         let plaintext = cipher
-            .decrypt(Nonce::from_slice(&nonce), ciphertext.as_ref())
+            .decrypt(&nonce, ciphertext.as_ref())
             .map_err(|error| anyhow!("failed to decrypt secret: {error}"))?;
         String::from_utf8(plaintext).context("stored secret is not valid UTF-8")
     }
