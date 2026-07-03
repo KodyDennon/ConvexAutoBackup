@@ -2,7 +2,17 @@
   "name": "@convex-autobackup/web",
   "private": true,
   "version": "0.1.0",
+  "license": "Apache-2.0",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KodyDennon/ConvexAutoBackup.git",
+    "directory": "web"
+  },
+  "bugs": {
+    "url": "https://github.com/KodyDennon/ConvexAutoBackup/issues"
+  },
+  "homepage": "https://github.com/KodyDennon/ConvexAutoBackup#readme",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

@@ -19,12 +19,12 @@ It is designed for developers, teams, agencies, and AI agents that need reliable
 
 ## Implemented Now
 
-This repository starts with the production-grade project skeleton:
+The current implementation includes:
 
 - Rust workspace with `core`, `server`, `cli`, `worker`, and `mcp` crates.
 - SQLite app database with migrations for users, API tokens, encrypted secrets, teams, projects, targets, destinations, jobs, schedules, and runs.
 - CLI commands to initialize state, create users/tokens/secrets/projects/targets/destinations/jobs/schedules, run due schedules, run backups, verify backups, restore backups, and list runs.
-- HTTP API endpoints for bootstrap owner creation, token creation, encrypted secrets, projects, Convex Cloud targets, local and S3-compatible destinations, jobs, schedules, backup execution, verification, restore, and runs.
+- HTTP API endpoints for bootstrap owner creation, email/password login, user management, token listing/revocation, encrypted secrets, projects, Convex Cloud targets, local and S3-compatible destinations, jobs, schedules, backup execution, verification, restore, DR reports, audit, and runs.
 - Backup engine that resolves encrypted deploy-key secrets or env references, runs the Convex export command, writes local archives atomically or uploads S3-compatible objects, writes manifests, and records success/failure runs.
 - Guarded restore engine that verifies the backup and requires exact deployment confirmation before invoking Convex import.
 - DR evidence report generation from persisted run history.
@@ -32,9 +32,10 @@ This repository starts with the production-grade project skeleton:
 - Local retention pruning by `keep_last`.
 - Dedicated scheduler worker process for persisted schedules.
 - Tested auth, encrypted secrets, scheduling, manifest, path-safety, local storage, SQLite, backup, verification, restore, server health/auth, and worker policy logic.
-- React web app shell served by the Rust service.
+- React web console served by the Rust service for onboarding, login, setup, backup runs, verification, guarded restore, DR reports, audit review, user management, and API token management.
 - Dockerfile, Compose file, CI, Dependabot, Makefile, editor config, and environment example.
 - Full project documentation in `docs/`.
+- Public open-source metadata, issue templates, PR template, CODEOWNERS, security policy, and release checklist.
 
 ## Quick Start
 
@@ -124,9 +125,19 @@ docs            Product, architecture, security, DR, API, CLI, MCP, deployment d
 make setup       # Install web deps and fetch Rust deps
 make build       # Build web and Rust workspace
 make test        # Run Rust and web tests
-make check       # Format check, clippy, tests, and web build
+make check       # Source-size guard, web build, fmt, clippy, and tests
 make serve       # Start the local service
 ```
+
+## Public Repository
+
+Canonical repository:
+
+```text
+https://github.com/KodyDennon/ConvexAutoBackup
+```
+
+Before publishing a release or changing visibility, run the checklist in `docs/OPEN_SOURCE_RELEASE.md`.
 
 ## License
 
