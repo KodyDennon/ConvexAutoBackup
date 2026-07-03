@@ -1,6 +1,6 @@
-# Dependency Audit
+# Dependency Ownership Audit
 
-This audit tracks which dependencies are worth keeping, replacing, or feature-gating as ConvexAutoBackup moves from beta packaging toward a smaller public crate surface.
+This audit tracks which dependencies are worth keeping upstream and which behavior ConvexAutoBackup should own directly. The goal is code ownership and production control, not dependency-count minimalism by itself.
 
 Audit date: 2026-07-03
 
@@ -17,56 +17,95 @@ The Rust workspace is intentionally small:
 | `convex-autobackup-mcp` | 149 | 149 | 0 |
 | **Total** | **6,060** | **5,772** | **288** |
 
-The normal dependency graph currently resolves to about 257 crates. Because the first-party code is small, dependency choices should be judged by whether they avoid meaningful production risk, not only by convenience.
+The full Cargo metadata set currently includes 292 registry packages. Of those, 257 are under 20,000 Rust LOC. That threshold is useful for finding candidates, but it is not enough by itself: small crypto, password hashing, TLS, database, serialization, HTTP, and async-runtime crates can still be bad ownership targets.
 
-## Replacement Policy
+## Ownership Policy
 
-Use local code when all of these are true:
+Own behavior in this repo, or in small `convex-autobackup-*` support crates, when all of these are true:
 
 - The behavior is narrow and stable.
-- A correct implementation is under roughly 100-200 lines including tests.
+- The upstream crate is under roughly 20,000 Rust LOC.
+- A correct project-specific implementation is realistic to fully test.
 - The code is not cryptography, TLS, HTTP protocol parsing, SQL storage, async runtime behavior, or password hashing.
-- Tests can cover the full behavior.
+- Owning it reduces supply-chain exposure or gives us meaningful product control.
 
-Keep upstream crates when the crate owns security, protocol correctness, portability, or large compatibility surfaces.
+Keep upstream crates when the crate owns security, protocol correctness, portability, or large compatibility surfaces. "Under 20k LOC" does not make those safe to own.
 
 Feature-gate dependencies when they are valuable but not needed by every install path.
 
-## Replace First
+## Direct Dependency LOC
 
-These are safe, production-grade replacement candidates.
+These are the direct registry dependencies currently used by workspace crates. LOC is counted from `.rs` files in the local Cargo registry source.
 
-| Dependency | Current Use | Why Replace | Replacement Plan | Risk |
+| Dependency | Version | Rust LOC | Used By | Ownership Decision |
+| --- | ---: | ---: | --- | --- |
+| `dirs` | 6.0.0 | 445 | core, server, CLI, worker | Own now |
+| `hmac` | 0.12.1 | 609 | core | Keep upstream |
+| `percent-encoding` | 2.3.2 | 696 | core | Own later or keep with S3 |
+| `rust-embed` | 8.11.0 | 811 | server | Own now |
+| `hex` | 0.4.3 | 823 | core | Own later or keep with S3 |
+| `subtle` | 2.6.1 | 1,442 | core | Keep upstream |
+| `getrandom` | 0.2.17/0.3.4/0.4.3 | 2,026-2,986 | core | Keep upstream |
+| `mime_guess` | 2.0.5 | 2,397 | server | Own now |
+| `sha2` | 0.10.9 | 2,433 | core | Keep upstream |
+| `thiserror` | 2.0.18 | 2,817 | core | Own later |
+| `argon2` | 0.5.3 | 2,865 | core | Keep upstream |
+| `cron` | 0.17.0 | 3,276 | core | Own scoped version or feature-gate |
+| `async-trait` | 0.1.89 | 3,327 | core | Own via API refactor |
+| `clap` | 4.6.1 | 4,265 | CLI, worker | Own later if CLI stabilizes |
+| `anyhow` | 1.0.103 | 5,890 | all crates | Own later |
+| `base64` | 0.22.1 | 7,549 | core | Keep upstream unless S3/auth encoding is narrowed |
+| `aes-gcm` | 0.11.0 | 7,816 | core | Keep upstream |
+| `uuid` | 1.23.4 | 8,741 | core, server, CLI, worker | Keep upstream |
+| `regex` | 1.12.4 | 11,995 | core | Own now |
+| `serde` | 1.0.228 | 17,331 | all crates | Keep upstream |
+| `axum` | 0.8.9 | 19,775 | server, CLI | Keep upstream |
+| `reqwest` | 0.13.4 | 20,133 | core | Keep upstream, isolate behind owned storage boundary |
+| `rusqlite` | 0.40.1 | 22,384 | core | Keep upstream |
+| `serde_json` | 1.0.150 | 23,185 | all crates | Keep upstream |
+| `tower-http` | 0.6.11/0.7.0 | 25,507-31,204 | server/reqwest | Keep upstream or reduce server middleware |
+| `tracing-subscriber` | 0.3.23 | 28,699 | server, CLI, worker | Keep upstream for now |
+| `chrono` | 0.4.45 | 34,285 | core | Keep upstream for now |
+| `tracing` | 0.1.44 | 72,356 | server, worker | Keep upstream |
+| `tokio` | 1.52.3 | 137,250 | core, server, CLI, worker | Keep upstream |
+
+## Own First
+
+These are safe, production-grade ownership candidates.
+
+| Dependency | Current Use | Why Own | Ownership Plan | Risk |
 | --- | --- | --- | --- | --- |
-| `regex` | One static safe-name check in `crates/core/src/paths.rs`. | Pulls a regex engine for `[A-Za-z0-9._-]+`. | Replace with `bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' \| b'_' \| b'-'))` and keep the current path safety tests. | Low |
+| `regex` | One static safe-name check in `crates/core/src/paths.rs`. | We only need `[A-Za-z0-9._-]+`. | Replace with `bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' \| b'_' \| b'-'))` and keep the current path safety tests. | Low |
 | `mime_guess` | One content type lookup for embedded web assets. | Static asset extensions are known. | Replace with a local `content_type_for_path()` covering `.html`, `.css`, `.js`, `.json`, `.svg`, `.ico`, `.wasm`, `.txt`, defaulting to `application/octet-stream`. | Low |
 | `dirs` | Default data directory resolution in core/server. | App-specific path policy should be explicit and documented. | Add `default_data_dir()` helper using `CONVEX_AUTOBACKUP_DATA_DIR`, then OS-specific env fallbacks: XDG on Unix, `APPDATA` on Windows, HOME fallback. | Low-Medium |
+| `rust-embed` | Embeds Vite build output into the server crate. | We can own generated asset embedding for our exact Vite output. | Generate a small Rust module at build/release time with `include_bytes!` asset entries and a static lookup table. | Medium |
 
-## Replace With Care
+## Own With Care
 
-These can be replaced, but only if the behavior is deliberately scoped.
+These can be owned, but only if the behavior is deliberately scoped.
 
 | Dependency | Current Use | Recommendation | Reason |
 | --- | --- | --- | --- |
-| `rust-embed` | Embeds Vite build output into the server crate. | Replace with generated static asset module or runtime `web-dist` serving. | Removes proc-macro/build-time asset machinery, but the replacement must preserve single-binary releases. |
 | `cron` | Supports arbitrary six-field cron expressions. | Feature-gate first; replace later only if we accept a smaller schedule language. | Interval/daily/weekly are easy. Full cron correctness is a larger compatibility surface. |
 | `async-trait` | Object-safe async `ConvexExporter`/`ConvexImporter` traits used by backup/restore/scheduler. | Replace only after converting trait calls to generic parameters or boxed futures. | Native async traits are not a drop-in for current `&dyn ConvexExporter` usage. |
 | `clap` | CLI and worker argument parsing. | Keep for now; possible future manual parser. | The CLI has many subcommands. Manual parsing is feasible but would be more code and more UX risk. |
+| `anyhow` | Application-wide fallible operations and context. | Replace after errors are grouped into explicit core/server/CLI error types. | Broad mechanical refactor; improves public API clarity. |
+| `thiserror` | Error derive for a few enums. | Replace after `anyhow` cleanup with manual `Display` and `Error` implementations where useful. | Low technical risk, medium churn. |
 
-## Feature-Gate First
+## Own Boundaries, Keep Internals
 
-These dependencies are legitimate, but they should not be forced onto every consumer.
+Some dependencies should stay upstream, but we should own the boundary around them so they are swappable and isolated.
 
 | Dependency Surface | Current Pull | Recommendation |
 | --- | ---: | --- |
-| S3-compatible storage via `reqwest` + TLS | About 116 crates from `reqwest` alone. | Move S3 support behind an `s3` feature. Local-only core installs should not compile HTTP/TLS. |
-| Web server via `axum`/`hyper`/`tower` | About 70 crates from `axum`. | Keep in `convex-autobackup-server`, but remove direct `axum` from the CLI crate if CLI can call server helpers without importing server protocol types. |
-| Tracing subscriber stack | About 27 crates. | Keep for binaries, avoid in library crates unless needed. |
-| Cron support | About 25 crates. | Put `Schedule::Cron` evaluation behind a `cron` feature or keep the enum and return a clear unavailable error when disabled. |
+| S3-compatible storage via `reqwest` + TLS | About 116 crates from `reqwest` alone. | Keep upstream HTTP/TLS, but own the `ObjectStore` boundary and hide `reqwest` inside the S3 adapter. |
+| Web server via `axum`/`hyper`/`tower` | About 70 crates from `axum`. | Keep upstream HTTP server stack, but own handler contracts and avoid leaking Axum types from public core APIs. |
+| Tracing subscriber stack | About 27 crates. | Keep upstream logging, but keep setup in binaries only. |
+| Cron support | About 25 crates. | Either own a narrow schedule parser or keep cron as optional advanced scheduling. |
 
 ## Keep
 
-These should not be rebuilt locally.
+These should not be rebuilt locally even when they are under 20k LOC.
 
 | Dependency | Reason |
 | --- | --- |
@@ -87,19 +126,20 @@ These should not be rebuilt locally.
 - Crypto ecosystem crates have some duplicate families due to current RustCrypto transitions. Do not force these manually unless RustSec or `cargo deny` indicates a real issue.
 - `rust-embed` adds build-time/proc-macro dependencies that are avoidable if we generate static asset code ourselves.
 
-## Recommended Order
+## Recommended Ownership Order
 
-1. Replace `regex`, `mime_guess`, and `dirs` with tested local helpers.
-2. Add workspace features: `s3`, `cron`, `server`, and possibly `embedded-web`.
-3. Move `reqwest`, `hmac`, `sha2`, `hex`, and `percent-encoding` under the `s3` feature where possible.
-4. Replace `rust-embed` with a generated static asset module so release binaries still include the web UI.
-5. Remove direct `axum` use from the CLI if the CLI can delegate serving to `convex-autobackup-server` without importing Axum directly.
-6. Revisit `async-trait` after backup/restore/scheduler APIs are converted away from `&dyn` async traits.
-7. Reconsider `clap` only after the public CLI stabilizes.
+1. Own `regex`, `mime_guess`, and `dirs` as local production helpers.
+2. Own web asset embedding instead of using `rust-embed`.
+3. Own a typed error model and remove `anyhow` from public library APIs.
+4. Remove `thiserror` by manually implementing small error enums.
+5. Decide whether advanced cron is product-critical. If not, own a scoped schedule grammar.
+6. Convert async backup/restore traits away from `async-trait`.
+7. Keep `reqwest`, TLS, SQLite, crypto, `serde`, `axum`, and `tokio`, but own narrow boundaries around each.
+8. Consider owning CLI parsing only after command shape stabilizes.
 
 ## Acceptance Gates
 
-Every dependency-reduction PR should pass:
+Every ownership PR should pass:
 
 ```bash
 make check
