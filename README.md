@@ -188,6 +188,7 @@ docs            Product, architecture, security, DR, API, CLI, MCP, deployment d
 - [HTTP API contract](docs/API_CONTRACT.md)
 - [MCP contract](docs/MCP_CONTRACT.md)
 - [Testing](docs/TESTING.md)
+- [Dependency audit](docs/DEPENDENCY_AUDIT.md)
 - [GitHub repository setup](docs/GITHUB_REPOSITORY.md)
 - [Open-source release checklist](docs/OPEN_SOURCE_RELEASE.md)
 
