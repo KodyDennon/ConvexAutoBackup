@@ -33,6 +33,31 @@ Keep upstream crates when the crate owns security, protocol correctness, portabi
 
 Feature-gate dependencies when they are valuable but not needed by every install path.
 
+## Owned Crate Policy
+
+Not every replacement should be private inline code.
+
+Use local modules when the behavior is only meaningful inside ConvexAutoBackup, such as static asset content types or backup path segment validation.
+
+Create a dedicated owned crate when the replacement is reusable across projects or likely to become a stable utility surface. Dedicated owned crates should have:
+
+- Their own source subtree in this repository so history and ownership stay isolated.
+- A package name under the `convex-autobackup-*` family unless the crate is intentionally general-purpose.
+- A crate-level README, changelog entry, license metadata, docs, tests, and examples.
+- CI checks that can run the crate independently.
+- crates.io publishing through the release pipeline.
+- A clear API boundary so ConvexAutoBackup consumes it like any external user would.
+
+Candidate owned crates from this audit:
+
+| Candidate Crate | Replaces | Scope |
+| --- | --- | --- |
+| `convex-autobackup-paths` | `regex` for safe path/name validation | Backup-safe relative paths, safe object-key segments, path traversal rejection. |
+| `convex-autobackup-assets` | `mime_guess`, `rust-embed` | Generated static asset manifests and content type lookup for bundled web UIs. |
+| `convex-autobackup-errors` | `anyhow`, `thiserror` over time | Shared typed error helpers and manual error implementations for public APIs. |
+| `convex-autobackup-schedule` | `cron` if advanced cron is narrowed | Interval, daily, weekly, and project-owned cron subset evaluation. |
+| `convex-autobackup-cli` parser module or crate | `clap` later | Stable command grammar after the public CLI settles. |
+
 ## Direct Dependency LOC
 
 These are the direct registry dependencies currently used by workspace crates. LOC is counted from `.rs` files in the local Cargo registry source.
@@ -128,11 +153,11 @@ These should not be rebuilt locally even when they are under 20k LOC.
 
 ## Recommended Ownership Order
 
-1. Own `regex`, `mime_guess`, and `dirs` as local production helpers.
-2. Own web asset embedding instead of using `rust-embed`.
+1. Own `regex`, `mime_guess`, and `dirs` as local production helpers or small owned crates.
+2. Own web asset embedding instead of using `rust-embed`; this is a strong candidate for a dedicated reusable crate.
 3. Own a typed error model and remove `anyhow` from public library APIs.
-4. Remove `thiserror` by manually implementing small error enums.
-5. Decide whether advanced cron is product-critical. If not, own a scoped schedule grammar.
+4. Remove `thiserror` by manually implementing small error enums or moving shared error helpers into an owned crate.
+5. Decide whether advanced cron is product-critical. If not, own a scoped schedule grammar as a dedicated crate.
 6. Convert async backup/restore traits away from `async-trait`.
 7. Keep `reqwest`, TLS, SQLite, crypto, `serde`, `axum`, and `tokio`, but own narrow boundaries around each.
 8. Consider owning CLI parsing only after command shape stabilizes.
