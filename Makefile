@@ -28,6 +28,7 @@ repo-size:
 
 web-build:
 	npm --prefix web run build
+	./scripts/ci/sync-web-dist.sh
 
 web-test:
 	npm --prefix web test -- --run

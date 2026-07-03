@@ -82,11 +82,13 @@ The release workflow publishes:
 - `SHA256SUMS`.
 - GitHub Release provenance attestations.
 - GHCR image `ghcr.io/kodydennon/convex-autobackup`.
-- Docker Hub image `kodydennon/convex-autobackup`.
+- Docker Hub image `kodydoty/convex-autobackup`.
+- crates.io packages for `convex-autobackup`, `convex-autobackup-core`, `convex-autobackup-server`, `convex-autobackup-worker`, and `convex-autobackup-mcp`.
 
 Docker Hub publishing requires repository secrets:
 
 ```text
 DOCKERHUB_USERNAME
 DOCKERHUB_TOKEN
+CARGO_REGISTRY_TOKEN
 ```

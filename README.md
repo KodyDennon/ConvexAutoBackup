@@ -2,8 +2,9 @@
 
 [![CI](https://github.com/KodyDennon/ConvexAutoBackup/actions/workflows/ci.yml/badge.svg)](https://github.com/KodyDennon/ConvexAutoBackup/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/KodyDennon/ConvexAutoBackup?include_prereleases&label=release)](https://github.com/KodyDennon/ConvexAutoBackup/releases)
+[![crates.io](https://img.shields.io/crates/v/convex-autobackup?label=crates.io)](https://crates.io/crates/convex-autobackup)
 [![License](https://img.shields.io/github/license/KodyDennon/ConvexAutoBackup)](LICENSE)
-[![Docker Hub](https://img.shields.io/docker/pulls/kodydennon/convex-autobackup?label=docker%20pulls)](https://hub.docker.com/r/kodydennon/convex-autobackup)
+[![Docker Hub](https://img.shields.io/docker/pulls/kodydoty/convex-autobackup?label=docker%20pulls)](https://hub.docker.com/r/kodydoty/convex-autobackup)
 [![Rust](https://img.shields.io/badge/Rust-core-b7410e)](Cargo.toml)
 [![React](https://img.shields.io/badge/React-console-226b52)](web/package.json)
 
@@ -18,6 +19,7 @@ It is designed for developers, teams, agencies, and AI agents that need reliable
 | Native macOS/Linux | Beta | Desktop or small server installs with autostart |
 | Windows MSI/PowerShell | Beta | Windows users who want binaries plus guided setup |
 | Docker Compose | Beta | VPS, NAS, homelab, and containerized installs |
+| crates.io | Beta | Rust users who prefer `cargo install` |
 | Source checkout | Developer | Local development and contribution |
 
 Self-hosted only. There is no hosted SaaS. The default service binds to `0.0.0.0:8976` for LAN/server installs, so expose it to the public internet only behind HTTPS.
@@ -78,8 +80,18 @@ The Docker setup script writes a persistent install directory, generates a maste
 
 ```text
 ghcr.io/kodydennon/convex-autobackup
-kodydennon/convex-autobackup
+kodydoty/convex-autobackup
 ```
+
+### Cargo install
+
+```bash
+cargo install convex-autobackup --version 0.1.0-beta.1
+convex-autobackup runner install --json
+convex-autobackup supervise
+```
+
+The `cargo install` path is useful for Rust users. It does not create OS services, generate a master key, or write installer-managed config, so native/Docker installers remain the lower-friction path.
 
 ### Source development
 

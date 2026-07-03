@@ -22,7 +22,9 @@ jobs:
       - name: Check source file size
         run: ./scripts/ci/check-file-lines.sh 600
       - name: Build embedded web UI
-        run: npm --prefix web run build
+        run: |
+          npm --prefix web run build
+          ./scripts/ci/sync-web-dist.sh
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable

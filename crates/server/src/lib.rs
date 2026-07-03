@@ -24,7 +24,7 @@ use uuid::Uuid;
 use metadata::{capabilities, openapi_spec};
 
 #[derive(RustEmbed)]
-#[folder = "../../web/dist"]
+#[folder = "web-dist"]
 struct WebAssets;
 
 #[derive(Debug, Clone)]

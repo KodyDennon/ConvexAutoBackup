@@ -3,10 +3,16 @@ name = "convex-autobackup-worker"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-convex-autobackup-core = { path = "../core" }
+convex-autobackup-core = { version = "0.1.0-beta.1", path = "../core" }
 clap.workspace = true
 dirs.workspace = true
 serde.workspace = true

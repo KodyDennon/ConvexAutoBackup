@@ -60,8 +60,20 @@ Published images:
 
 ```text
 ghcr.io/kodydennon/convex-autobackup
-kodydennon/convex-autobackup
+kodydoty/convex-autobackup
 ```
+
+## Cargo Install
+
+Rust users can install the CLI from crates.io:
+
+```bash
+cargo install convex-autobackup --version 0.1.0-beta.1
+convex-autobackup runner install --json
+convex-autobackup supervise
+```
+
+This path does not install OS services or generate a managed env file. Use the native or Docker installer for the lowest-friction setup.
 
 Run a single scheduler pass manually:
 

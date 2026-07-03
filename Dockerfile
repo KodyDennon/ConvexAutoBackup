@@ -9,7 +9,7 @@ FROM rust:1.95-bookworm AS rust-builder
 WORKDIR /app
 COPY Cargo.toml ./
 COPY crates ./crates
-COPY --from=web /app/web/dist ./web/dist
+COPY --from=web /app/web/dist ./crates/server/web-dist
 RUN cargo build --release --workspace
 
 FROM node:26-bookworm-slim
