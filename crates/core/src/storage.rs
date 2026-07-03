@@ -4,13 +4,14 @@ use crate::{
 };
 use anyhow::{Context, anyhow};
 use chrono::Utc;
-use object_store::{
-    ObjectStoreExt,
-    aws::{AmazonS3, AmazonS3Builder},
-    path::Path as ObjectPath,
-};
+use hmac::{Hmac, Mac};
+use percent_encoding::{NON_ALPHANUMERIC, percent_encode};
+use reqwest::{Client as HttpClient, Method, Url};
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
+
+type HmacSha256 = Hmac<Sha256>;
 
 #[derive(Debug, Clone)]
 pub struct StoredBackup {
@@ -209,7 +210,7 @@ pub async fn store_s3_backup(
         ));
     };
 
-    let store = s3_store_from_destination(database, destination)?;
+    let client = s3_client_from_destination(database, destination)?;
 
     let archive_name = format!(
         "{}-{}.zip",
@@ -224,18 +225,12 @@ pub async fn store_s3_backup(
     let mut stored_manifest = manifest.clone();
     stored_manifest.storage_uri.clone_from(&storage_uri);
 
-    store
-        .put(
-            &ObjectPath::from(archive_key.as_str()),
-            archive_bytes.to_vec().into(),
-        )
+    client
+        .put_object(&archive_key, archive_bytes.to_vec())
         .await
         .context("failed to upload S3 archive")?;
-    store
-        .put(
-            &ObjectPath::from(manifest_key.as_str()),
-            serde_json::to_vec_pretty(&stored_manifest)?.into(),
-        )
+    client
+        .put_object(&manifest_key, serde_json::to_vec_pretty(&stored_manifest)?)
         .await
         .context("failed to upload S3 manifest")?;
 
@@ -246,10 +241,10 @@ pub async fn store_s3_backup(
     })
 }
 
-pub fn s3_store_from_destination(
+pub fn s3_client_from_destination(
     database: &AppDatabase,
     destination: &StorageDestination,
-) -> anyhow::Result<AmazonS3> {
+) -> anyhow::Result<S3CompatibleClient> {
     let StorageKind::S3Compatible {
         bucket,
         region,
@@ -266,15 +261,12 @@ pub fn s3_store_from_destination(
     let secret_json = SecretVault::from_env(database.clone())?.get_secret(credentials.id)?;
     let secret: S3CredentialSecret =
         serde_json::from_str(&secret_json).context("S3 credential secret must be JSON")?;
-    let mut builder = AmazonS3Builder::new()
-        .with_bucket_name(bucket)
-        .with_access_key_id(secret.access_key_id)
-        .with_secret_access_key(secret.secret_access_key)
-        .with_region(region.clone().unwrap_or_else(|| "auto".to_string()));
-    if let Some(endpoint) = endpoint {
-        builder = builder.with_endpoint(endpoint);
-    }
-    builder.build().context("failed to build S3 object store")
+    S3CompatibleClient::new(
+        bucket.clone(),
+        region.clone().unwrap_or_else(|| "auto".to_string()),
+        endpoint.clone(),
+        secret,
+    )
 }
 
 pub fn s3_object_key_from_uri(uri: &str) -> anyhow::Result<String> {
@@ -297,6 +289,191 @@ fn object_key(prefix: Option<&str>, project_name: &str, deployment: &str) -> Str
     .filter(|segment| !segment.is_empty())
     .collect::<Vec<_>>()
     .join("/")
+}
+
+#[derive(Clone)]
+pub struct S3CompatibleClient {
+    http: HttpClient,
+    bucket: String,
+    region: String,
+    endpoint: Option<String>,
+    credentials: S3CredentialSecret,
+}
+
+impl S3CompatibleClient {
+    fn new(
+        bucket: String,
+        region: String,
+        endpoint: Option<String>,
+        credentials: S3CredentialSecret,
+    ) -> anyhow::Result<Self> {
+        Ok(Self {
+            http: HttpClient::builder()
+                .build()
+                .context("failed to build S3 HTTP client")?,
+            bucket,
+            region,
+            endpoint,
+            credentials,
+        })
+    }
+
+    pub async fn put_object(&self, key: &str, body: Vec<u8>) -> anyhow::Result<S3Response> {
+        let request = self.signed_request(Method::PUT, key, body)?;
+        let response = self
+            .http
+            .request(request.method, request.url)
+            .headers(request.headers)
+            .body(request.body)
+            .send()
+            .await
+            .context("failed to send S3 PUT request")?;
+        ensure_success(response).await
+    }
+
+    pub async fn get_object(&self, key: &str) -> anyhow::Result<Vec<u8>> {
+        let request = self.signed_request(Method::GET, key, Vec::new())?;
+        let response = self
+            .http
+            .request(request.method, request.url)
+            .headers(request.headers)
+            .send()
+            .await
+            .context("failed to send S3 GET request")?;
+        let response = ensure_success(response).await?;
+        Ok(response.body)
+    }
+
+    fn signed_request(
+        &self,
+        method: Method,
+        key: &str,
+        body: Vec<u8>,
+    ) -> anyhow::Result<SignedS3Request> {
+        let now = Utc::now();
+        let url = self.object_url(key)?;
+        let host = url
+            .host_str()
+            .ok_or_else(|| anyhow!("S3 endpoint URL has no host"))?
+            .to_string();
+        let payload_hash = hex_sha256(&body);
+        let amz_date = now.format("%Y%m%dT%H%M%SZ").to_string();
+        let date = now.format("%Y%m%d").to_string();
+        let scope = format!("{date}/{}/s3/aws4_request", self.region);
+        let canonical_uri = if url.path().is_empty() {
+            "/"
+        } else {
+            url.path()
+        };
+        let canonical_headers =
+            format!("host:{host}\nx-amz-content-sha256:{payload_hash}\nx-amz-date:{amz_date}\n");
+        let signed_headers = "host;x-amz-content-sha256;x-amz-date";
+        let canonical_request = format!(
+            "{}\n{canonical_uri}\n\n{canonical_headers}\n{signed_headers}\n{payload_hash}",
+            method.as_str()
+        );
+        let string_to_sign = format!(
+            "AWS4-HMAC-SHA256\n{amz_date}\n{scope}\n{}",
+            hex_sha256(canonical_request.as_bytes())
+        );
+        let signature = sign_v4(
+            &self.credentials.secret_access_key,
+            &date,
+            &self.region,
+            &string_to_sign,
+        )?;
+        let authorization = format!(
+            "AWS4-HMAC-SHA256 Credential={}/{scope}, SignedHeaders={signed_headers}, Signature={signature}",
+            self.credentials.access_key_id
+        );
+
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert("host", host.parse()?);
+        headers.insert("x-amz-content-sha256", payload_hash.parse()?);
+        headers.insert("x-amz-date", amz_date.parse()?);
+        headers.insert("authorization", authorization.parse()?);
+
+        Ok(SignedS3Request {
+            method,
+            url,
+            headers,
+            body,
+        })
+    }
+
+    fn object_url(&self, key: &str) -> anyhow::Result<Url> {
+        let encoded_key = encode_s3_key(key);
+        if let Some(endpoint) = &self.endpoint {
+            let endpoint = endpoint.trim_end_matches('/');
+            return Url::parse(&format!("{endpoint}/{}/{encoded_key}", self.bucket))
+                .context("failed to build S3-compatible endpoint URL");
+        }
+        let region = if self.region == "auto" {
+            "us-east-1"
+        } else {
+            &self.region
+        };
+        Url::parse(&format!(
+            "https://{}.s3.{region}.amazonaws.com/{encoded_key}",
+            self.bucket
+        ))
+        .context("failed to build AWS S3 URL")
+    }
+}
+
+struct SignedS3Request {
+    method: Method,
+    url: Url,
+    headers: reqwest::header::HeaderMap,
+    body: Vec<u8>,
+}
+
+pub struct S3Response {
+    pub body: Vec<u8>,
+}
+
+async fn ensure_success(response: reqwest::Response) -> anyhow::Result<S3Response> {
+    let status = response.status();
+    let body = response
+        .bytes()
+        .await
+        .context("failed to read S3 response body")?
+        .to_vec();
+    if !status.is_success() {
+        return Err(anyhow!(
+            "S3 request failed with status {status}: {}",
+            String::from_utf8_lossy(&body)
+        ));
+    }
+    Ok(S3Response { body })
+}
+
+fn encode_s3_key(key: &str) -> String {
+    key.split('/')
+        .map(|segment| percent_encode(segment.as_bytes(), NON_ALPHANUMERIC).to_string())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn hex_sha256(bytes: impl AsRef<[u8]>) -> String {
+    format!("{:x}", Sha256::digest(bytes.as_ref()))
+}
+
+fn sign_v4(secret: &str, date: &str, region: &str, string_to_sign: &str) -> anyhow::Result<String> {
+    let k_date = hmac_sha256(format!("AWS4{secret}").as_bytes(), date.as_bytes())?;
+    let k_region = hmac_sha256(&k_date, region.as_bytes())?;
+    let k_service = hmac_sha256(&k_region, b"s3")?;
+    let k_signing = hmac_sha256(&k_service, b"aws4_request")?;
+    Ok(hex::encode(hmac_sha256(
+        &k_signing,
+        string_to_sign.as_bytes(),
+    )?))
+}
+
+fn hmac_sha256(key: &[u8], value: &[u8]) -> anyhow::Result<Vec<u8>> {
+    let mut mac = HmacSha256::new_from_slice(key).context("invalid HMAC key")?;
+    mac.update(value);
+    Ok(mac.finalize().into_bytes().to_vec())
 }
 
 fn safe_segment(value: &str) -> String {

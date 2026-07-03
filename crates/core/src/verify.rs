@@ -1,8 +1,7 @@
 use crate::models::StorageKind;
-use crate::storage::{s3_object_key_from_uri, s3_store_from_destination};
+use crate::storage::{s3_client_from_destination, s3_object_key_from_uri};
 use crate::{AppDatabase, BackupManifest};
 use anyhow::{Context, anyhow};
-use object_store::{ObjectStoreExt, path::Path as ObjectPath};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
@@ -57,16 +56,13 @@ async fn read_archive_bytes(
         let bundle = database.get_job_bundle(job_id)?;
         match bundle.destination.kind {
             StorageKind::S3Compatible { .. } => {
-                let store = s3_store_from_destination(database, &bundle.destination)?;
+                let client = s3_client_from_destination(database, &bundle.destination)?;
                 let key = s3_object_key_from_uri(storage_uri)?;
-                let bytes = store
-                    .get(&ObjectPath::from(key.as_str()))
+                let bytes = client
+                    .get_object(&key)
                     .await
-                    .context("failed to read S3 archive")?
-                    .bytes()
-                    .await
-                    .context("failed to collect S3 archive bytes")?;
-                return Ok(bytes.to_vec());
+                    .context("failed to read S3 archive")?;
+                return Ok(bytes);
             }
             _ => return Err(anyhow!("run is not associated with an S3 destination")),
         }
