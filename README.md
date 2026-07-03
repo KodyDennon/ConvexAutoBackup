@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/KodyDennon/ConvexAutoBackup/actions/workflows/ci.yml/badge.svg)](https://github.com/KodyDennon/ConvexAutoBackup/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/KodyDennon/ConvexAutoBackup?include_prereleases&label=release)](https://github.com/KodyDennon/ConvexAutoBackup/releases)
-[![crates.io](https://img.shields.io/crates/v/convex-autobackup?label=crates.io)](https://crates.io/crates/convex-autobackup)
-[![License](https://img.shields.io/github/license/KodyDennon/ConvexAutoBackup)](LICENSE)
-[![Docker Hub](https://img.shields.io/docker/pulls/kodydoty/convex-autobackup?label=docker%20pulls)](https://hub.docker.com/r/kodydoty/convex-autobackup)
+[![crates.io](https://img.shields.io/badge/crates.io-v0.1.0--beta.2-orange)](https://crates.io/crates/convex-autobackup)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![Docker](https://img.shields.io/badge/Docker-Hub%20%2B%20GHCR-2496ed)](https://hub.docker.com/r/kodydoty/convex-autobackup)
 [![Rust](https://img.shields.io/badge/Rust-core-b7410e)](Cargo.toml)
 [![React](https://img.shields.io/badge/React-console-226b52)](web/package.json)
 
