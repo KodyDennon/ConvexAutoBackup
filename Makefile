@@ -1,4 +1,4 @@
-.PHONY: setup build test check fmt lint repo-size web-build web-test serve worker-policy mcp-health
+.PHONY: setup build test check fmt lint repo-size web-build web-test serve doctor worker-policy mcp-health
 
 setup:
 	npm --prefix web install
@@ -33,7 +33,10 @@ web-test:
 	npm --prefix web test -- --run
 
 serve:
-	cargo run -p convex-autobackup -- serve
+	cargo run -p convex-autobackup -- supervise
+
+doctor:
+	cargo run -p convex-autobackup -- doctor --json
 
 worker-policy:
 	cargo run -p convex-autobackup-worker -- policy --json

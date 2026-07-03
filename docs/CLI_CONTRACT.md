@@ -17,8 +17,11 @@ convex-autobackup
 ## Implemented Command Groups
 
 - `serve`: start the web/API service.
+- `supervise`: start the web/API service and scheduler worker in one supervised process.
 - `init`: initialize SQLite state and print paths.
 - `health`: print local CLI/service health.
+- `doctor`: validate install, service, worker, database, master-key, and managed runner readiness.
+- `runner`: install or inspect the pinned Convex CLI runner.
 - `user`: create users.
 - `token`: create API tokens.
 - `secret`: store and list encrypted secrets.

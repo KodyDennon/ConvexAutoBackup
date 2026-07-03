@@ -21,6 +21,9 @@ Use this checklist before making a repository, release, or tag public.
 - Pull request template
 - Bug and feature issue templates
 - CI and release workflows
+- Native install scripts
+- Docker setup script
+- SHA256 checksums and artifact provenance
 
 ## Validation
 
@@ -62,10 +65,28 @@ git status --short
 make check
 git push -u origin main
 gh repo edit KodyDennon/ConvexAutoBackup --visibility public
+git tag v0.1.0-beta.1
+git push origin v0.1.0-beta.1
 ```
 
 If the repository does not exist yet:
 
 ```bash
 gh repo create KodyDennon/ConvexAutoBackup --public --source=. --remote=origin --push
+```
+
+The release workflow publishes:
+
+- Full macOS, Linux, and Windows bundles.
+- `install.sh`, `install.ps1`, and `docker-setup.sh`.
+- `SHA256SUMS`.
+- GitHub Release provenance attestations.
+- GHCR image `ghcr.io/kodydennon/convex-autobackup`.
+- Docker Hub image `kodydennon/convex-autobackup`.
+
+Docker Hub publishing requires repository secrets:
+
+```text
+DOCKERHUB_USERNAME
+DOCKERHUB_TOKEN
 ```

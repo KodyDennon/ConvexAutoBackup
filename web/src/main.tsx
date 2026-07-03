@@ -63,6 +63,7 @@ function App() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [updateNotice, setUpdateNotice] = useState<string | null>(null);
   const [oneTimeToken, setOneTimeToken] = useState<string | null>(null);
 
   const client = useMemo(() => new ApiClient(token), [token]);
@@ -127,6 +128,28 @@ function App() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    const version = state.health?.version;
+    if (!version) return;
+    const controller = new AbortController();
+    void fetch("https://api.github.com/repos/KodyDennon/ConvexAutoBackup/releases/latest", {
+      signal: controller.signal,
+      headers: { Accept: "application/vnd.github+json" }
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((release: { tag_name?: string; html_url?: string } | null) => {
+        if (!release?.tag_name) return;
+        const current = version.startsWith("v") ? version : `v${version}`;
+        if (release.tag_name !== current) {
+          setUpdateNotice(`Update available: ${release.tag_name}. Download it from ${release.html_url ?? "GitHub Releases"}.`);
+        }
+      })
+      .catch(() => {
+        setUpdateNotice(null);
+      });
+    return () => controller.abort();
+  }, [state.health?.version]);
 
   const authenticate = (newToken: string, message: string) => {
     localStorage.setItem(TOKEN_STORAGE_KEY, newToken);
@@ -250,7 +273,7 @@ function App() {
           </div>
         </header>
 
-        <SystemMessages error={error} notice={notice} oneTimeToken={oneTimeToken} />
+        <SystemMessages error={error} notice={notice ?? updateNotice} oneTimeToken={oneTimeToken} />
 
         {activeSection === "dashboard" && <Dashboard stats={stats} state={state} />}
         {activeSection === "setup" && <SetupSection client={client} state={state} actionLoading={actionLoading} perform={perform} />}

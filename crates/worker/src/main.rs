@@ -12,6 +12,7 @@ use tracing_subscriber::{EnvFilter, fmt};
 #[derive(Debug, Parser)]
 #[command(name = "convex-autobackup-worker")]
 #[command(about = "Backup worker process for ConvexAutoBackup")]
+#[command(version)]
 struct Cli {
     #[arg(long, env = "CONVEX_AUTOBACKUP_DATA_DIR")]
     data_dir: Option<PathBuf>,
@@ -68,7 +69,7 @@ async fn main() -> anyhow::Result<()> {
                 .with_env_filter(EnvFilter::from_default_env().add_directive("info".parse()?))
                 .init();
             let scheduler = scheduler_for_data_dir(&data_dir)?;
-            let exporter = CommandConvexExporter::default();
+            let exporter = CommandConvexExporter::for_data_dir(&data_dir);
             tracing::info!(
                 data_dir = %data_dir.display(),
                 poll_seconds,
@@ -93,7 +94,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::RunOnce { json } => {
             let scheduler = scheduler_for_data_dir(&data_dir)?;
-            let exporter = CommandConvexExporter::default();
+            let exporter = CommandConvexExporter::for_data_dir(&data_dir);
             let runs = scheduler.run_due_once(&exporter).await?;
             print_output(
                 json,
@@ -123,7 +124,5 @@ fn print_output<T: Serialize>(json: bool, value: &T) -> anyhow::Result<()> {
 }
 
 fn default_data_dir() -> PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("convex-autobackup")
+    convex_autobackup_core::default_data_dir()
 }

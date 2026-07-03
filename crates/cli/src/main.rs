@@ -4,16 +4,17 @@ use anyhow::Context;
 use args::*;
 use clap::Parser;
 use convex_autobackup_core::{
-    AppDatabase, AuthService, BackupEngine, CommandConvexExporter, CommandConvexImporter,
-    CreateCloudTarget, CreateJobSchedule, CreateLocalDestination, CreateProject,
-    CreateS3Destination, CreateScheduledJob, CreateUser, MissedRunPolicy, RestoreEngine,
-    RetentionPolicy, Role, Schedule, SchedulerService, SecretKind, SecretVault, generate_dr_report,
-    list_secret_metadata, verify_run,
+    AppDatabase, AuthService, BackupEngine, CONVEX_CLI_PACKAGE, CONVEX_CLI_VERSION,
+    CommandConvexExporter, CommandConvexImporter, CreateCloudTarget, CreateJobSchedule,
+    CreateLocalDestination, CreateProject, CreateS3Destination, CreateScheduledJob, CreateUser,
+    MissedRunPolicy, RestoreEngine, RetentionPolicy, Role, Schedule, SchedulerService, SecretKind,
+    SecretVault, convex_runner_dir, generate_dr_report, list_secret_metadata, npm_program,
+    runner_status, verify_run,
 };
 use convex_autobackup_server::AppState;
 use serde::Serialize;
-use std::path::PathBuf;
-use tokio::net::TcpListener;
+use std::{path::PathBuf, time::Duration};
+use tokio::{net::TcpListener, process::Command as TokioCommand, time::sleep};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -34,11 +35,39 @@ async fn main() -> anyhow::Result<()> {
                 listener,
                 convex_autobackup_server::router_with_state(AppState {
                     version: env!("CARGO_PKG_VERSION"),
+                    data_dir,
                     database,
                     staging_dir,
                 }),
             )
             .await?;
+        }
+        Command::Supervise { bind, poll_seconds } => {
+            tracing_subscriber::fmt::init();
+            let database = AppDatabase::open(&database_path)?;
+            let listener = TcpListener::bind(bind)
+                .await
+                .with_context(|| format!("failed to bind {bind}"))?;
+            let scheduler = SchedulerService::new(
+                database.clone(),
+                BackupEngine::new(database.clone(), staging_dir.clone()),
+            );
+            let exporter = CommandConvexExporter::for_data_dir(&data_dir);
+            let server = axum::serve(
+                listener,
+                convex_autobackup_server::router_with_state(AppState {
+                    version: env!("CARGO_PKG_VERSION"),
+                    data_dir: data_dir.clone(),
+                    database,
+                    staging_dir,
+                }),
+            );
+            eprintln!("ConvexAutoBackup supervised service listening at http://{bind}");
+            tokio::select! {
+                result = server => result?,
+                result = run_scheduler_loop(scheduler, exporter, poll_seconds) => result?,
+                signal = tokio::signal::ctrl_c() => signal?,
+            }
         }
         Command::Init(args) => {
             let database = AppDatabase::open(&database_path)?;
@@ -61,6 +90,26 @@ async fn main() -> anyhow::Result<()> {
             };
             print_output(args.json, &health)?;
         }
+        Command::Doctor { bind, json } => {
+            let output = run_doctor(&data_dir, &database_path, bind).await;
+            let has_error = output.checks.iter().any(|check| check.status == "error");
+            print_output(json, &output)?;
+            if has_error {
+                anyhow::bail!("doctor found install problems");
+            }
+        }
+        Command::Runner { command } => match command {
+            RunnerCommand::Install { json } => {
+                let status = install_runner(&data_dir).await?;
+                print_output(json, &serde_json::json!({ "runner": status }))?;
+            }
+            RunnerCommand::Status { json } => {
+                print_output(
+                    json,
+                    &serde_json::json!({ "runner": runner_status(&data_dir) }),
+                )?;
+            }
+        },
         Command::Project { command } => {
             let database = AppDatabase::open(&database_path)?;
             match command {
@@ -217,7 +266,7 @@ async fn main() -> anyhow::Result<()> {
             match command {
                 BackupCommand::Run { job_id, json } => {
                     let engine = BackupEngine::new(database, staging_dir);
-                    let exporter = CommandConvexExporter::default();
+                    let exporter = CommandConvexExporter::for_data_dir(&data_dir);
                     let run = engine.run_job(job_id, &exporter).await?;
                     print_output(json, &serde_json::json!({ "run": run }))?;
                 }
@@ -251,7 +300,7 @@ async fn main() -> anyhow::Result<()> {
                 ScheduleCommand::RunDue { json } => {
                     let backup_engine = BackupEngine::new(database.clone(), staging_dir);
                     let scheduler = SchedulerService::new(database, backup_engine);
-                    let exporter = CommandConvexExporter::default();
+                    let exporter = CommandConvexExporter::for_data_dir(&data_dir);
                     let runs = scheduler.run_due_once(&exporter).await?;
                     print_output(json, &serde_json::json!({ "runs": runs }))?;
                 }
@@ -270,7 +319,7 @@ async fn main() -> anyhow::Result<()> {
         } => {
             let database = AppDatabase::open(&database_path)?;
             let restore = RestoreEngine::new(database);
-            let importer = CommandConvexImporter::default();
+            let importer = CommandConvexImporter::for_data_dir(&data_dir);
             let result = restore
                 .restore_run_to_target(run_id, target_id, &confirm_deployment, &importer)
                 .await?;
@@ -310,10 +359,147 @@ fn print_output<T: Serialize>(json: bool, value: &T) -> anyhow::Result<()> {
     Ok(())
 }
 
+async fn run_scheduler_loop(
+    scheduler: SchedulerService,
+    exporter: CommandConvexExporter,
+    poll_seconds: u64,
+) -> anyhow::Result<()> {
+    loop {
+        if let Err(error) = scheduler.run_due_once(&exporter).await {
+            eprintln!("scheduler pass failed: {error}");
+        }
+        sleep(Duration::from_secs(poll_seconds)).await;
+    }
+}
+
+async fn install_runner(
+    data_dir: &std::path::Path,
+) -> anyhow::Result<convex_autobackup_core::ManagedRunnerStatus> {
+    let runner_dir = convex_runner_dir(data_dir);
+    tokio::fs::create_dir_all(&runner_dir).await?;
+    let package_json = serde_json::json!({
+        "private": true,
+        "dependencies": {
+            CONVEX_CLI_PACKAGE: CONVEX_CLI_VERSION
+        }
+    });
+    tokio::fs::write(
+        runner_dir.join("package.json"),
+        serde_json::to_string_pretty(&package_json)?,
+    )
+    .await?;
+    let output = TokioCommand::new(npm_program())
+        .arg("install")
+        .arg("--omit=dev")
+        .arg("--no-audit")
+        .arg("--no-fund")
+        .current_dir(&runner_dir)
+        .output()
+        .await
+        .with_context(|| format!("failed to execute {}", npm_program()))?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "failed to install managed Convex runner: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    let status = runner_status(data_dir);
+    if !status.installed {
+        anyhow::bail!("managed Convex runner install completed but binary was not found");
+    }
+    Ok(status)
+}
+
+async fn run_doctor(
+    data_dir: &std::path::Path,
+    database_path: &std::path::Path,
+    bind: std::net::SocketAddr,
+) -> DoctorOutput {
+    let mut checks = Vec::new();
+    checks.push(match tokio::fs::create_dir_all(data_dir).await {
+        Ok(()) => DoctorCheck {
+            name: "data_dir",
+            status: "ok",
+            detail: data_dir.display().to_string(),
+        },
+        Err(error) => DoctorCheck {
+            name: "data_dir",
+            status: "error",
+            detail: error.to_string(),
+        },
+    });
+    checks.push(match AppDatabase::open(database_path) {
+        Ok(database) => DoctorCheck {
+            name: "database",
+            status: "ok",
+            detail: database.path().display().to_string(),
+        },
+        Err(error) => DoctorCheck {
+            name: "database",
+            status: "error",
+            detail: error.to_string(),
+        },
+    });
+    checks.push(match std::env::var("CONVEX_AUTOBACKUP_MASTER_KEY") {
+        Ok(value) if value.len() >= 32 => DoctorCheck {
+            name: "master_key",
+            status: "ok",
+            detail: "CONVEX_AUTOBACKUP_MASTER_KEY is set".to_string(),
+        },
+        Ok(_) => DoctorCheck {
+            name: "master_key",
+            status: "error",
+            detail: "CONVEX_AUTOBACKUP_MASTER_KEY is shorter than 32 characters".to_string(),
+        },
+        Err(_) => DoctorCheck {
+            name: "master_key",
+            status: "error",
+            detail: "CONVEX_AUTOBACKUP_MASTER_KEY is not set".to_string(),
+        },
+    });
+    let runner = runner_status(data_dir);
+    checks.push(DoctorCheck {
+        name: "managed_runner",
+        status: if runner.installed { "ok" } else { "error" },
+        detail: runner.convex_bin,
+    });
+    checks.push(DoctorCheck {
+        name: "worker",
+        status: "ok",
+        detail: "scheduler is available through the supervise command".to_string(),
+    });
+    let host = if bind.ip().is_unspecified() {
+        std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
+    } else {
+        bind.ip()
+    };
+    let health_addr = std::net::SocketAddr::new(host, bind.port());
+    checks.push(match tokio::net::TcpStream::connect(health_addr).await {
+        Ok(_) => DoctorCheck {
+            name: "service",
+            status: "ok",
+            detail: format!("reachable at {health_addr}"),
+        },
+        Err(error) => DoctorCheck {
+            name: "service",
+            status: "error",
+            detail: format!("not reachable at {health_addr}: {error}"),
+        },
+    });
+    let status = if checks.iter().any(|check| check.status == "error") {
+        "error"
+    } else {
+        "ok"
+    };
+    DoctorOutput {
+        status,
+        version: env!("CARGO_PKG_VERSION"),
+        checks,
+    }
+}
+
 fn default_data_dir() -> PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("convex-autobackup")
+    convex_autobackup_core::default_data_dir()
 }
 
 fn parse_role(value: &str) -> anyhow::Result<Role> {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activity, Clock3, DatabaseBackup, HardDrive, KeyRound, Plus } from "lucide-react";
+import { Activity, CheckCircle2, Clock3, DatabaseBackup, HardDrive, KeyRound, Play, Plus } from "lucide-react";
 import {
   ApiClient,
   destinationLabel,
@@ -9,6 +9,7 @@ import {
 } from "../appState";
 import { secretKinds, weekdays } from "../constants";
 import { Field, ResourceForm, ResourceList, Select } from "../components/common";
+import "./setupGuide.css";
 
 type Perform = (key: string, action: () => Promise<string | null | undefined>) => Promise<void>;
 
@@ -25,6 +26,8 @@ export function SetupSection({
 }) {
   return (
     <div className="page-stack">
+      <SetupGuide client={client} state={state} actionLoading={actionLoading} perform={perform} />
+
       <section className="form-grid">
         <ProjectForm client={client} actionLoading={actionLoading} perform={perform} />
         <SecretForm client={client} actionLoading={actionLoading} perform={perform} />
@@ -40,6 +43,70 @@ export function SetupSection({
         <ResourceList title="Destinations" items={state.destinations.map((destination) => [destination.name, destinationLabel(destination)])} />
       </section>
     </div>
+  );
+}
+
+function SetupGuide({
+  client,
+  state,
+  actionLoading,
+  perform
+}: {
+  client: ApiClient;
+  state: ServiceState;
+  actionLoading: string | null;
+  perform: Perform;
+}) {
+  const latestRun = state.runs[0]?.run;
+  const firstJob = state.jobs[0];
+  const steps = [
+    { label: "Owner account", complete: state.users.length > 0, detail: "Admin access is configured" },
+    { label: "Convex target", complete: state.targets.length > 0, detail: "Deployment and deploy key are connected" },
+    { label: "Backup destination", complete: state.destinations.length > 0, detail: "Choose local filesystem or S3-compatible storage" },
+    { label: "Schedule", complete: state.schedules.length > 0, detail: "Automatic backups have a run cadence" },
+    { label: "First backup", complete: latestRun?.status === "succeeded", detail: latestRun ? `Latest run: ${latestRun.status}` : "Run and verify the first archive" }
+  ];
+  const completeCount = steps.filter((step) => step.complete).length;
+
+  return (
+    <section className="setup-guide">
+      <div className="setup-guide-header">
+        <div>
+          <p className="eyebrow">First-run protection path</p>
+          <h2>Get this deployment backed up</h2>
+          <p className="subtle">Work left to right: connect Convex, choose where backups live, schedule them, then run the first backup.</p>
+        </div>
+        <div className="setup-progress" aria-label={`${completeCount} of ${steps.length} setup steps complete`}>
+          <strong>{completeCount}/{steps.length}</strong>
+          <span>ready</span>
+        </div>
+      </div>
+      <div className="setup-rail">
+        {steps.map((step) => (
+          <div className={`setup-step ${step.complete ? "complete" : ""}`} key={step.label}>
+            <CheckCircle2 size={18} />
+            <strong>{step.label}</strong>
+            <span>{step.detail}</span>
+          </div>
+        ))}
+      </div>
+      <div className="setup-guide-actions">
+        <button
+          type="button"
+          disabled={!firstJob || actionLoading === "first-backup"}
+          onClick={() =>
+            perform("first-backup", async () => {
+              if (!firstJob) return "Create a backup job before running the first backup.";
+              await client.request(`/api/v1/jobs/${firstJob.id}/run`, { method: "POST" });
+              return "First backup run started. Check Runs for the result, then verify the archive.";
+            })
+          }
+        >
+          <Play size={16} /> Run first backup
+        </button>
+        <span className="subtle">Local and S3-compatible destinations are both supported in this beta.</span>
+      </div>
+    </section>
   );
 }
 

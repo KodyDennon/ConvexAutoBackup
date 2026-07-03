@@ -64,7 +64,10 @@
 
 - Unsigned native release bundles.
 - Docker release image.
+- Native install scripts and Windows PowerShell installer.
+- Supervised server plus worker runtime.
+- Managed pinned Convex CLI runner.
+- Install doctor checks.
 - Upgrade and migration tests.
 - Reverse proxy hardening.
 - Load and concurrency tests.
-

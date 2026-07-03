@@ -1,0 +1,95 @@
+.setup-guide {
+  background: #ffffff;
+  border: 1px solid #dce4dd;
+  border-left: 5px solid #226b52;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(16, 33, 29, 0.05);
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.setup-guide-header,
+.setup-guide-actions {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.setup-guide-header h2 {
+  font-size: 1.25rem;
+  margin-bottom: 0.2rem;
+}
+
+.setup-progress {
+  align-items: center;
+  background: #edf2ef;
+  border-radius: 8px;
+  color: #18332c;
+  display: grid;
+  flex: 0 0 auto;
+  min-height: 64px;
+  min-width: 84px;
+  place-items: center;
+  padding: 0.65rem;
+}
+
+.setup-progress strong {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.setup-progress span,
+.setup-step span {
+  color: #65736e;
+  font-size: 0.82rem;
+}
+
+.setup-rail {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.setup-step {
+  border: 1px solid #dce4dd;
+  border-radius: 8px;
+  display: grid;
+  gap: 0.35rem;
+  min-height: 118px;
+  padding: 0.85rem;
+}
+
+.setup-step svg {
+  color: #9a7a2b;
+}
+
+.setup-step.complete {
+  background: #f1faf4;
+  border-color: #bfe3cb;
+}
+
+.setup-step.complete svg {
+  color: #226b52;
+}
+
+@media (max-width: 1240px) {
+  .setup-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .setup-guide-header,
+  .setup-guide-actions {
+    align-items: stretch;
+    display: grid;
+  }
+}
+
+@media (max-width: 680px) {
+  .setup-rail {
+    grid-template-columns: 1fr;
+  }
+}

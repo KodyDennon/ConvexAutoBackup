@@ -7,6 +7,7 @@ pub mod manifest;
 pub mod models;
 pub mod paths;
 pub mod restore;
+pub mod runner;
 pub mod schedule;
 pub mod scheduler;
 pub mod secrets;
@@ -30,6 +31,10 @@ pub use models::{
     RetentionPolicy, SecretRef, StorageDestination, StorageKind,
 };
 pub use restore::{RestoreEngine, RestoreResult};
+pub use runner::{
+    CONVEX_CLI_PACKAGE, CONVEX_CLI_VERSION, ManagedRunnerStatus, convex_runner_dir,
+    default_data_dir, managed_convex_bin, npm_program, runner_status,
+};
 pub use schedule::{MissedRunPolicy, Schedule, ScheduleError};
 pub use scheduler::{CreateJobSchedule, DueJobSchedule, SchedulerService};
 pub use secrets::{SecretKind, SecretVault, StoredSecret, list_secret_metadata};

@@ -47,7 +47,7 @@ All backup and restore operations run through a queue. The queue enforces:
 
 ## Convex Runner
 
-The Convex runner executes the configured Convex command. By default it runs `npx convex export` with the selected deployment, output path, and file-storage flag. `CONVEX_AUTOBACKUP_CONVEX_BIN` can point at a managed executable wrapper.
+The Convex runner executes the configured Convex command. Normal installs provision a pinned `convex` npm package into the app-managed runner directory and execute that binary directly with the selected deployment, output path, and file-storage flag. `CONVEX_AUTOBACKUP_CONVEX_BIN` can override the runner path for controlled environments. Source checkouts can still fall back to `npx convex` for development.
 
 ## Implemented Storage
 

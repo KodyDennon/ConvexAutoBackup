@@ -1,4 +1,4 @@
-use crate::{ConvexTarget, ConvexTargetKind};
+use crate::{ConvexTarget, ConvexTargetKind, managed_convex_bin};
 use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use std::path::Path;
@@ -38,35 +38,60 @@ pub trait ConvexImporter: Send + Sync {
 #[derive(Debug, Clone)]
 pub struct CommandConvexExporter {
     program: String,
+    prefix_args: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct CommandConvexImporter {
     program: String,
+    prefix_args: Vec<String>,
 }
 
 impl Default for CommandConvexExporter {
     fn default() -> Self {
-        Self {
-            program: std::env::var("CONVEX_AUTOBACKUP_CONVEX_BIN")
-                .unwrap_or_else(|_| "npx".to_string()),
-        }
+        Self::from_program(
+            std::env::var("CONVEX_AUTOBACKUP_CONVEX_BIN").unwrap_or_else(|_| "npx".to_string()),
+        )
     }
 }
 
 impl Default for CommandConvexImporter {
     fn default() -> Self {
-        Self {
-            program: std::env::var("CONVEX_AUTOBACKUP_CONVEX_BIN")
-                .unwrap_or_else(|_| "npx".to_string()),
-        }
+        Self::from_program(
+            std::env::var("CONVEX_AUTOBACKUP_CONVEX_BIN").unwrap_or_else(|_| "npx".to_string()),
+        )
     }
 }
 
 impl CommandConvexExporter {
+    pub fn for_data_dir(data_dir: &Path) -> Self {
+        if let Ok(program) = std::env::var("CONVEX_AUTOBACKUP_CONVEX_BIN") {
+            return Self::from_program(program);
+        }
+        let managed = managed_convex_bin(data_dir);
+        if managed.is_file() {
+            return Self {
+                program: managed.display().to_string(),
+                prefix_args: Vec::new(),
+            };
+        }
+        Self::default()
+    }
+
+    fn from_program(program: String) -> Self {
+        let prefix_args = if program.ends_with("npx") || program.ends_with("npx.cmd") {
+            vec!["convex".to_string()]
+        } else {
+            Vec::new()
+        };
+        Self {
+            program,
+            prefix_args,
+        }
+    }
+
     pub fn command_args(request: &ExportRequest, output_path: &Path) -> Vec<String> {
         let mut args = vec![
-            "convex".to_string(),
             "export".to_string(),
             "--path".to_string(),
             output_path.to_string_lossy().to_string(),
@@ -91,9 +116,34 @@ impl CommandConvexExporter {
 }
 
 impl CommandConvexImporter {
+    pub fn for_data_dir(data_dir: &Path) -> Self {
+        if let Ok(program) = std::env::var("CONVEX_AUTOBACKUP_CONVEX_BIN") {
+            return Self::from_program(program);
+        }
+        let managed = managed_convex_bin(data_dir);
+        if managed.is_file() {
+            return Self {
+                program: managed.display().to_string(),
+                prefix_args: Vec::new(),
+            };
+        }
+        Self::default()
+    }
+
+    fn from_program(program: String) -> Self {
+        let prefix_args = if program.ends_with("npx") || program.ends_with("npx.cmd") {
+            vec!["convex".to_string()]
+        } else {
+            Vec::new()
+        };
+        Self {
+            program,
+            prefix_args,
+        }
+    }
+
     pub fn command_args(request: &ImportRequest, archive_path: &Path) -> Vec<String> {
         let mut args = vec![
-            "convex".to_string(),
             "import".to_string(),
             "--path".to_string(),
             archive_path.to_string_lossy().to_string(),
@@ -124,6 +174,7 @@ impl ConvexExporter for CommandConvexExporter {
     ) -> anyhow::Result<String> {
         let args = Self::command_args(&request, output_path);
         let mut command = Command::new(&self.program);
+        command.args(&self.prefix_args);
         command.args(&args);
         command.env("CONVEX_DEPLOY_KEY", &request.deploy_key);
 
@@ -152,6 +203,7 @@ impl ConvexImporter for CommandConvexImporter {
     ) -> anyhow::Result<String> {
         let args = Self::command_args(&request, archive_path);
         let mut command = Command::new(&self.program);
+        command.args(&self.prefix_args);
         command.args(&args);
         command.env("CONVEX_DEPLOY_KEY", &request.deploy_key);
 
@@ -209,7 +261,6 @@ mod tests {
         assert_eq!(
             args,
             vec![
-                "convex",
                 "export",
                 "--path",
                 "/tmp/out.zip",
@@ -242,7 +293,6 @@ mod tests {
         assert_eq!(
             args,
             vec![
-                "convex",
                 "import",
                 "--path",
                 "/tmp/in.zip",

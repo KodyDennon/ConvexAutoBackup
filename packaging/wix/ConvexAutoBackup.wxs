@@ -1,0 +1,38 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="ConvexAutoBackup"
+           Manufacturer="ConvexAutoBackup contributors"
+           Version="$(var.Version)"
+           UpgradeCode="{8D102573-6D4F-48DF-8E49-47B04653EF4E}"
+           Scope="perUser">
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLFOLDER" Name="ConvexAutoBackup" />
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="ConvexAutoBackup" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+    </Feature>
+
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <Component Id="MainExe">
+        <File Source="$(var.SourceDir)\convex-autobackup.exe" KeyPath="yes" />
+      </Component>
+      <Component Id="WorkerExe">
+        <File Source="$(var.SourceDir)\convex-autobackup-worker.exe" KeyPath="yes" />
+      </Component>
+      <Component Id="McpExe">
+        <File Source="$(var.SourceDir)\convex-autobackup-mcp.exe" KeyPath="yes" />
+      </Component>
+      <Component Id="InstallScript">
+        <File Source="$(var.SourceDir)\install.ps1" KeyPath="yes" />
+      </Component>
+      <Component Id="Readme">
+        <File Source="$(var.SourceDir)\README.md" KeyPath="yes" />
+      </Component>
+      <Component Id="License">
+        <File Source="$(var.SourceDir)\LICENSE" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Package>
+</Wix>

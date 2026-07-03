@@ -11,6 +11,7 @@ fn test_router() -> Router {
     std::fs::create_dir_all(&dir).unwrap();
     let state = AppState {
         version: env!("CARGO_PKG_VERSION"),
+        data_dir: dir.clone(),
         database: AppDatabase::open(dir.join("app.db")).unwrap(),
         staging_dir: dir.join("staging"),
     };

@@ -560,6 +560,7 @@ nav {
   .topbar {
     display: grid;
   }
+
 }
 
 @media (max-width: 680px) {

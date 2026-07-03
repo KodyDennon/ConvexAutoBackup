@@ -12,7 +12,7 @@ COPY crates ./crates
 COPY --from=web /app/web/dist ./web/dist
 RUN cargo build --release --workspace
 
-FROM debian:bookworm-slim
+FROM node:26-bookworm-slim
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl \
   && rm -rf /var/lib/apt/lists/*
@@ -20,7 +20,11 @@ WORKDIR /app
 COPY --from=rust-builder /app/target/release/convex-autobackup /usr/local/bin/convex-autobackup
 COPY --from=rust-builder /app/target/release/convex-autobackup-mcp /usr/local/bin/convex-autobackup-mcp
 COPY --from=rust-builder /app/target/release/convex-autobackup-worker /usr/local/bin/convex-autobackup-worker
+COPY packaging/docker-entrypoint.sh /usr/local/bin/convex-autobackup-entrypoint
+RUN chmod +x /usr/local/bin/convex-autobackup-entrypoint
 ENV CONVEX_AUTOBACKUP_BIND=0.0.0.0:8976
+ENV CONVEX_AUTOBACKUP_DATA_DIR=/data
 EXPOSE 8976
 VOLUME ["/data"]
-CMD ["convex-autobackup", "serve"]
+ENTRYPOINT ["convex-autobackup-entrypoint"]
+CMD ["convex-autobackup", "supervise"]

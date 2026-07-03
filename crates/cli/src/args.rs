@@ -6,6 +6,7 @@ use uuid::Uuid;
 #[derive(Debug, Parser)]
 #[command(name = "convex-autobackup")]
 #[command(about = "Self-hosted Convex backup and disaster recovery service")]
+#[command(version)]
 pub(crate) struct Cli {
     #[arg(long, env = "CONVEX_AUTOBACKUP_DATA_DIR")]
     pub(crate) data_dir: Option<PathBuf>,
@@ -21,10 +22,29 @@ pub(crate) enum Command {
         #[arg(long, env = "CONVEX_AUTOBACKUP_BIND", default_value = "0.0.0.0:8976")]
         bind: SocketAddr,
     },
+    /// Start the web service and scheduler worker in one supervised process.
+    Supervise {
+        #[arg(long, env = "CONVEX_AUTOBACKUP_BIND", default_value = "0.0.0.0:8976")]
+        bind: SocketAddr,
+        #[arg(long, default_value_t = 30)]
+        poll_seconds: u64,
+    },
     /// Initialize the database and print paths.
     Init(JsonArg),
     /// Print service health in agent-friendly form.
     Health(JsonArg),
+    /// Validate install, service, worker, and managed runner readiness.
+    Doctor {
+        #[arg(long, env = "CONVEX_AUTOBACKUP_BIND", default_value = "0.0.0.0:8976")]
+        bind: SocketAddr,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Manage the app-provisioned Convex CLI runner.
+    Runner {
+        #[command(subcommand)]
+        command: RunnerCommand,
+    },
     /// Manage projects.
     User {
         #[command(subcommand)]
@@ -257,6 +277,20 @@ pub(crate) enum ScheduleCommand {
     },
 }
 
+#[derive(Debug, Subcommand)]
+pub(crate) enum RunnerCommand {
+    /// Install the pinned Convex CLI runner into the app data directory.
+    Install {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Print managed runner status.
+    Status {
+        #[arg(long)]
+        json: bool,
+    },
+}
+
 #[derive(Debug, Serialize)]
 pub(crate) struct InitOutput {
     pub(crate) status: &'static str,
@@ -272,4 +306,18 @@ pub(crate) struct CliHealth {
     pub(crate) service: &'static str,
     pub(crate) cli_version: &'static str,
     pub(crate) database_path: String,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct DoctorCheck {
+    pub(crate) name: &'static str,
+    pub(crate) status: &'static str,
+    pub(crate) detail: String,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct DoctorOutput {
+    pub(crate) status: &'static str,
+    pub(crate) version: &'static str,
+    pub(crate) checks: Vec<DoctorCheck>,
 }

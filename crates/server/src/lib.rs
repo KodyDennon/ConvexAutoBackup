@@ -30,6 +30,7 @@ struct WebAssets;
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub version: &'static str,
+    pub data_dir: PathBuf,
     pub database: AppDatabase,
     pub staging_dir: PathBuf,
 }
@@ -39,6 +40,7 @@ impl AppState {
         let data_dir = default_data_dir();
         Ok(Self {
             version: env!("CARGO_PKG_VERSION"),
+            data_dir: data_dir.clone(),
             database: AppDatabase::open(data_dir.join("convex-autobackup.sqlite3"))?,
             staging_dir: data_dir.join("staging"),
         })
@@ -363,7 +365,7 @@ async fn run_job(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_role(&state, &headers, RoleRequirement::RunBackup)?;
     let engine = BackupEngine::new(state.database.clone(), state.staging_dir.clone());
-    let exporter = CommandConvexExporter::default();
+    let exporter = CommandConvexExporter::for_data_dir(&state.data_dir);
     Ok(Json(serde_json::json!({
         "run": engine.run_job(job_id, &exporter).await?
     })))
@@ -397,7 +399,7 @@ async fn run_due_schedules(
     require_role(&state, &headers, RoleRequirement::RunBackup)?;
     let backup_engine = BackupEngine::new(state.database.clone(), state.staging_dir.clone());
     let scheduler = SchedulerService::new(state.database.clone(), backup_engine);
-    let exporter = CommandConvexExporter::default();
+    let exporter = CommandConvexExporter::for_data_dir(&state.data_dir);
     Ok(Json(serde_json::json!({
         "runs": scheduler.run_due_once(&exporter).await?
     })))
@@ -438,7 +440,7 @@ async fn restore_backup_run(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_role(&state, &headers, RoleRequirement::Manage)?;
     let restore = RestoreEngine::new(state.database.clone());
-    let importer = CommandConvexImporter::default();
+    let importer = CommandConvexImporter::for_data_dir(&state.data_dir);
     Ok(Json(serde_json::json!({
         "restore": restore
             .restore_run_to_target(
