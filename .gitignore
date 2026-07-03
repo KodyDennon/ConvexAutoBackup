@@ -1,0 +1,16 @@
+/target/
+/node_modules/
+/web/node_modules/
+/web/dist/assets/
+/.env
+/.env.*
+!.env.example
+/.DS_Store
+/.idea/
+/.vscode/
+/coverage/
+/.nyc_output/
+/tmp/
+/dist/
+/web/tsconfig.tsbuildinfo
+*.log

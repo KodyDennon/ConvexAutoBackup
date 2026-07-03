@@ -1,0 +1,15 @@
+services:
+  convex-autobackup:
+    build: .
+    image: convex-autobackup:local
+    ports:
+      - "8976:8976"
+    environment:
+      CONVEX_AUTOBACKUP_BIND: 0.0.0.0:8976
+      RUST_LOG: info
+    volumes:
+      - convex-autobackup-data:/data
+
+volumes:
+  convex-autobackup-data:
+
