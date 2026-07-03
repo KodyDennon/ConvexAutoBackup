@@ -5,10 +5,10 @@ Use this checklist before making a repository, release, or tag public.
 ## Repository Metadata
 
 - Repository visibility is public.
-- Description: `Self-hosted Convex backup and disaster recovery control plane`.
-- Homepage points to the README or project site.
-- Topics include `convex`, `backup`, `disaster-recovery`, `rust`, `react`, `self-hosted`, `cli`, and `mcp`.
-- Issues and GitHub Security Advisories are enabled.
+- Description: `Self-hosted Convex backup, restore, and disaster recovery control plane with web UI, CLI, Docker, native binaries, and MCP support.`
+- Homepage points to the latest GitHub Release.
+- Topics include `convex`, `convex-backup`, `backup`, `backups`, `disaster-recovery`, `rust`, `react`, `self-hosted`, `cli`, `mcp`, `docker`, `ghcr`, `crates-io`, and `github-actions`.
+- Issues, Discussions, Wiki, and GitHub Security Advisories are enabled where available.
 
 ## Required Files
 
@@ -65,7 +65,7 @@ git status --short
 make check
 git push -u origin main
 gh repo edit KodyDennon/ConvexAutoBackup --visibility public
-git tag v0.1.0-beta.1
+git -c tag.gpgSign=false tag -a v0.1.0-beta.1 -m "ConvexAutoBackup v0.1.0-beta.1"
 git push origin v0.1.0-beta.1
 ```
 
@@ -85,10 +85,12 @@ The release workflow publishes:
 - Docker Hub image `kodydoty/convex-autobackup`.
 - crates.io packages for `convex-autobackup`, `convex-autobackup-core`, `convex-autobackup-server`, `convex-autobackup-worker`, and `convex-autobackup-mcp`.
 
-Docker Hub publishing requires repository secrets:
+Docker Hub and crates.io publishing require repository secrets:
 
 ```text
 DOCKERHUB_USERNAME
 DOCKERHUB_TOKEN
 CARGO_REGISTRY_TOKEN
 ```
+
+Windows MSI packaging pins WiX Toolset `6.0.2` so CI does not pick up newer tool behavior unexpectedly.

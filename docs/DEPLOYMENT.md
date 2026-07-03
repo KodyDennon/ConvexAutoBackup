@@ -1,5 +1,7 @@
 # Deployment
 
+For install commands and first-run setup, see [Installation](INSTALLATION.md). For ongoing backup, restore, and upgrade procedures, see [Operations](OPERATIONS.md).
+
 ## Local Native
 
 Normal beta install:
@@ -91,6 +93,24 @@ convex-autobackup-worker --data-dir /data run --poll-seconds 30
 
 Production installs should place the service behind a reverse proxy that provides HTTPS. The app must support forwarded headers and secure cookie settings before public internet exposure.
 
+Minimal nginx shape:
+
+```nginx
+server {
+  listen 443 ssl http2;
+  server_name backups.example.com;
+
+  location / {
+    proxy_pass http://127.0.0.1:8976;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  }
+}
+```
+
+Firewall direct access to port `8976` when using a reverse proxy.
+
 ## Database Modes
 
 SQLite is the default and only active database mode in the beta. Postgres remains a roadmap item for larger server deployments.
@@ -113,3 +133,7 @@ Losing the encrypted secret-store key can make encrypted destination credentials
 ## Install Integrity
 
 Release installers verify `SHA256SUMS` before unpacking native bundles. GitHub Release artifacts also publish provenance attestations where GitHub Actions supports them. Artifacts are unsigned; paid platform code signing is intentionally not required.
+
+## Release Channels
+
+Native bundles are published to GitHub Releases. Container images are published to GHCR and Docker Hub. Rust crates are published to crates.io. There is no separate npm package for normal users because the web UI is embedded in the Rust server.

@@ -177,7 +177,10 @@ docs            Product, architecture, security, DR, API, CLI, MCP, deployment d
 
 ## Documentation
 
+- [Installation](docs/INSTALLATION.md)
 - [Deployment](docs/DEPLOYMENT.md)
+- [Operations](docs/OPERATIONS.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Security model](docs/SECURITY_MODEL.md)
 - [Backup model](docs/BACKUP_MODEL.md)
 - [Disaster recovery model](docs/DR_MODEL.md)
@@ -185,6 +188,7 @@ docs            Product, architecture, security, DR, API, CLI, MCP, deployment d
 - [HTTP API contract](docs/API_CONTRACT.md)
 - [MCP contract](docs/MCP_CONTRACT.md)
 - [Testing](docs/TESTING.md)
+- [GitHub repository setup](docs/GITHUB_REPOSITORY.md)
 - [Open-source release checklist](docs/OPEN_SOURCE_RELEASE.md)
 
 ## Development Commands

@@ -86,7 +86,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          dotnet tool install --global wix
+          dotnet tool install --global wix --version 6.0.2
           $bundle = "convex-autobackup-${{ matrix.asset }}"
           $msiVersion = "${{ github.ref_name }}" -replace "^v","" -replace "-.*",""
           wix build packaging/wix/ConvexAutoBackup.wxs `
