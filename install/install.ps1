@@ -9,7 +9,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 if ([string]::IsNullOrWhiteSpace($Version)) {
-  $Version = "v0.1.0-beta.2"
+  $Version = "v0.1.0-beta.3"
 }
 
 $asset = "convex-autobackup-windows-x86_64.zip"

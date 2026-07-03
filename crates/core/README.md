@@ -17,7 +17,7 @@ Most users should install the top-level `convex-autobackup` binary or run the Do
 
 ```toml
 [dependencies]
-convex-autobackup-core = "0.1.0-beta.2"
+convex-autobackup-core = "0.1.0-beta.3"
 ```
 
 ## Stability

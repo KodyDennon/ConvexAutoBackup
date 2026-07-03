@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-beta.3
+
+- Released the first dependency ownership wave from the current mainline commit.
+- Added the publishable `firstparty-error` crate and release publishing order for it.
+- Replaced ownable runtime dependencies with first-party code for error handling, scheduling, path validation, data directory selection, and bundled asset embedding.
+- Added crate-specific README files and package metadata for all published crates.
+
 ## 0.1.0-beta.2
 
 - Added the publishable `firstparty-error` crate and release publishing order for it.
