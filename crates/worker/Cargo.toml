@@ -5,14 +5,15 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description.workspace = true
 authors.workspace = true
-keywords.workspace = true
-categories.workspace = true
+description = "Scheduled backup worker binary for ConvexAutoBackup"
+readme = "README.md"
+keywords = ["convex", "backup", "worker", "scheduler", "restore"]
+categories = ["command-line-utilities", "database"]
 
 [dependencies]
 anyhow.workspace = true
-convex-autobackup-core = { version = "0.1.0-beta.1", path = "../core" }
+convex-autobackup-core = { version = "=0.1.0-beta.2", path = "../core" }
 clap.workspace = true
 dirs.workspace = true
 serde.workspace = true

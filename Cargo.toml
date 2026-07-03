@@ -9,15 +9,12 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/KodyDennon/ConvexAutoBackup"
 homepage = "https://github.com/KodyDennon/ConvexAutoBackup#readme"
-description = "Self-hosted Convex backup and disaster recovery control plane"
 authors = ["ConvexAutoBackup contributors"]
-keywords = ["convex", "backup", "disaster-recovery", "self-hosted", "cli"]
-categories = ["command-line-utilities", "web-programming::http-server"]
 
 [workspace.dependencies]
 anyhow = "1.0.100"

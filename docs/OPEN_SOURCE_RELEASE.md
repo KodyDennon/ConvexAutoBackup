@@ -65,8 +65,8 @@ git status --short
 make check
 git push -u origin main
 gh repo edit KodyDennon/ConvexAutoBackup --visibility public
-git -c tag.gpgSign=false tag -a v0.1.0-beta.1 -m "ConvexAutoBackup v0.1.0-beta.1"
-git push origin v0.1.0-beta.1
+git -c tag.gpgSign=false tag -a v0.1.0-beta.2 -m "ConvexAutoBackup v0.1.0-beta.2"
+git push origin v0.1.0-beta.2
 ```
 
 If the repository does not exist yet:

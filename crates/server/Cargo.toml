@@ -5,15 +5,16 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description.workspace = true
 authors.workspace = true
-keywords.workspace = true
-categories.workspace = true
+description = "Axum web server and embedded dashboard for ConvexAutoBackup"
+readme = "README.md"
+keywords = ["convex", "backup", "server", "dashboard", "axum"]
+categories = ["web-programming::http-server", "database"]
 
 [dependencies]
 anyhow.workspace = true
 axum.workspace = true
-convex-autobackup-core = { version = "0.1.0-beta.1", path = "../core" }
+convex-autobackup-core = { version = "=0.1.0-beta.2", path = "../core" }
 dirs.workspace = true
 mime_guess = "2.0.5"
 rust-embed = "8.9.0"

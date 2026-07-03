@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-VERSION="${CONVEX_AUTOBACKUP_VERSION:-v0.1.0-beta.1}"
+VERSION="${CONVEX_AUTOBACKUP_VERSION:-v0.1.0-beta.2}"
 REPO="${CONVEX_AUTOBACKUP_REPO:-KodyDennon/ConvexAutoBackup}"
 INSTALL_ROOT="${CONVEX_AUTOBACKUP_INSTALL_ROOT:-$HOME/.local/convex-autobackup}"
 BIN_DIR="${CONVEX_AUTOBACKUP_BIN_DIR:-$HOME/.local/bin}"

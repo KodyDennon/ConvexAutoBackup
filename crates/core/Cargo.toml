@@ -5,10 +5,11 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description.workspace = true
 authors.workspace = true
-keywords.workspace = true
-categories.workspace = true
+description = "Core backup, restore, scheduling, encryption, and storage primitives for ConvexAutoBackup"
+readme = "README.md"
+keywords = ["convex", "backup", "restore", "scheduler", "storage"]
+categories = ["database", "filesystem", "web-programming"]
 
 [dependencies]
 aes-gcm.workspace = true

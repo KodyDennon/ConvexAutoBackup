@@ -52,13 +52,13 @@ The current implementation includes:
 macOS and Linux:
 
 ```bash
-curl -fsSL https://github.com/KodyDennon/ConvexAutoBackup/releases/download/v0.1.0-beta.1/install.sh | sh
+curl -fsSL https://github.com/KodyDennon/ConvexAutoBackup/releases/download/v0.1.0-beta.2/install.sh | sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-iwr https://github.com/KodyDennon/ConvexAutoBackup/releases/download/v0.1.0-beta.1/install.ps1 -OutFile install.ps1
+iwr https://github.com/KodyDennon/ConvexAutoBackup/releases/download/v0.1.0-beta.2/install.ps1 -OutFile install.ps1
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
@@ -73,7 +73,7 @@ http://localhost:8976
 ### Docker beta install
 
 ```bash
-curl -fsSL https://github.com/KodyDennon/ConvexAutoBackup/releases/download/v0.1.0-beta.1/docker-setup.sh | sh
+curl -fsSL https://github.com/KodyDennon/ConvexAutoBackup/releases/download/v0.1.0-beta.2/docker-setup.sh | sh
 ```
 
 The Docker setup script writes a persistent install directory, generates a master key, starts the supervised service, and checks health. Images are published to:
@@ -86,7 +86,7 @@ kodydoty/convex-autobackup
 ### Cargo install
 
 ```bash
-cargo install convex-autobackup --version 0.1.0-beta.1
+cargo install convex-autobackup --version 0.1.0-beta.2
 convex-autobackup runner install --json
 convex-autobackup supervise
 ```

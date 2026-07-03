@@ -426,7 +426,7 @@ dependencies = [
 
 [[package]]
 name = "convex-autobackup"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -445,7 +445,7 @@ dependencies = [
 
 [[package]]
 name = "convex-autobackup-core"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -474,7 +474,7 @@ dependencies = [
 
 [[package]]
 name = "convex-autobackup-mcp"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "anyhow",
  "serde",
@@ -483,7 +483,7 @@ dependencies = [
 
 [[package]]
 name = "convex-autobackup-server"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "anyhow",
  "axum",
@@ -505,7 +505,7 @@ dependencies = [
 
 [[package]]
 name = "convex-autobackup-worker"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "anyhow",
  "clap",

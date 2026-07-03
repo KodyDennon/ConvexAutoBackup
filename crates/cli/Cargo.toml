@@ -5,17 +5,18 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description.workspace = true
 authors.workspace = true
-keywords.workspace = true
-categories.workspace = true
+description = "Command-line interface for running and managing ConvexAutoBackup"
+readme = "README.md"
+keywords = ["convex", "backup", "cli", "restore", "docker"]
+categories = ["command-line-utilities", "database"]
 
 [dependencies]
 anyhow.workspace = true
 axum.workspace = true
 clap.workspace = true
-convex-autobackup-core = { version = "0.1.0-beta.1", path = "../core" }
-convex-autobackup-server = { version = "0.1.0-beta.1", path = "../server" }
+convex-autobackup-core = { version = "=0.1.0-beta.2", path = "../core" }
+convex-autobackup-server = { version = "=0.1.0-beta.2", path = "../server" }
 dirs.workspace = true
 serde.workspace = true
 serde_json.workspace = true

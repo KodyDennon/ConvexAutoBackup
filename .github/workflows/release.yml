@@ -183,6 +183,7 @@ jobs:
       - uses: actions/download-artifact@v7
         with:
           path: release-artifacts
+          pattern: convex-autobackup-*
           merge-multiple: true
       - name: Add install scripts and checksums
         run: |
