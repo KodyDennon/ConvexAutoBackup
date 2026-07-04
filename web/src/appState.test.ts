@@ -108,6 +108,26 @@ describe("dashboard state helpers", () => {
     expect(stats.every((stat) => stat.readiness === "needs_setup")).toBe(true);
   });
 
+  it("tolerates partial runtime API data without crashing", () => {
+    const stats = buildDashboardStats({
+      ...dashboardInput(),
+      runs: undefined,
+      schedules: undefined,
+      drReport: {
+        generated_at: "2026-07-03T12:00:00Z",
+        readiness: "needs_setup",
+        latest_successful_run: null,
+        successful_run_count: 0,
+        failed_run_count: 0,
+        configured_job_count: 0
+      }
+    } as unknown as DashboardInput);
+
+    expect(stats.find((stat) => stat.label === "DR readiness")?.detail).toBe(
+      "DR report will evaluate jobs, runs, and failures"
+    );
+  });
+
   it("describes schedules and destinations for operator-facing labels", () => {
     expect(describeSchedule({ type: "interval_minutes", every: 15 })).toBe("Every 15 minutes");
     expect(describeSchedule({ type: "cron", expression: "0 0 2 * * *" })).toBe("0 0 2 * * *");

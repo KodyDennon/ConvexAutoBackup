@@ -15,7 +15,7 @@ Most users should run the top-level `convex-autobackup` binary or the Docker ima
 
 ```toml
 [dependencies]
-convex-autobackup-server = "0.1.0-beta.4"
+convex-autobackup-server = "0.1.0-beta.5"
 ```
 
 ## Links

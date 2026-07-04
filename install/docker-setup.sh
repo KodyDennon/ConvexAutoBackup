@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-VERSION="${CONVEX_AUTOBACKUP_VERSION:-v0.1.0-beta.4}"
+VERSION="${CONVEX_AUTOBACKUP_VERSION:-v0.1.0-beta.5}"
 IMAGE_REGISTRY="${CONVEX_AUTOBACKUP_IMAGE:-ghcr.io/kodydennon/convex-autobackup:${VERSION}}"
 INSTALL_DIR="${CONVEX_AUTOBACKUP_INSTALL_DIR:-$HOME/.convex-autobackup}"
 PORT="${CONVEX_AUTOBACKUP_PORT:-8976}"

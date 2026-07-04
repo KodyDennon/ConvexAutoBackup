@@ -196,7 +196,14 @@ export class ApiClient {
 }
 
 export function buildDashboardStats(input: DashboardInput): DashboardStat[] {
-  const latestRun = input.runs[0]?.run;
+  const projects = input.projects ?? [];
+  const targets = input.targets ?? [];
+  const destinations = input.destinations ?? [];
+  const jobs = input.jobs ?? [];
+  const schedules = input.schedules ?? [];
+  const runs = input.runs ?? [];
+  const drFindings = Array.isArray(input.drReport?.findings) ? input.drReport.findings : [];
+  const latestRun = runs[0]?.run;
   const latestRunText = latestRun ? `${sentenceCase(latestRun.status)} ${relativeTime(latestRun.started_at)}` : "No runs yet";
   const latestRunReady: Readiness =
     latestRun?.status === "succeeded" ? "ready" : latestRun ? "at_risk" : "needs_setup";
@@ -204,23 +211,23 @@ export function buildDashboardStats(input: DashboardInput): DashboardStat[] {
   return [
     {
       label: "Protected deployments",
-      value: input.targets.length.toLocaleString("en-US"),
-      detail: `${input.projects.length} projects, ${input.jobs.length} jobs`,
-      readiness: input.targets.length > 0 && input.jobs.length > 0 ? "ready" : "needs_setup"
+      value: targets.length.toLocaleString("en-US"),
+      detail: `${projects.length} projects, ${jobs.length} jobs`,
+      readiness: targets.length > 0 && jobs.length > 0 ? "ready" : "needs_setup"
     },
     {
       label: "Destinations",
-      value: input.destinations.length.toLocaleString("en-US"),
-      detail: input.destinations.some((destination) => destination.kind.type === "s3_compatible")
+      value: destinations.length.toLocaleString("en-US"),
+      detail: destinations.some((destination) => destination.kind.type === "s3_compatible")
         ? "Local and offsite options configured"
         : "Add S3-compatible offsite storage for stronger DR",
-      readiness: input.destinations.length > 0 ? "ready" : "needs_setup"
+      readiness: destinations.length > 0 ? "ready" : "needs_setup"
     },
     {
       label: "Next scheduled run",
-      value: input.schedules[0] ? formatDateTime(input.schedules[0].next_due_at) : "Not scheduled",
-      detail: input.schedules[0] ? describeSchedule(input.schedules[0].schedule) : "Create an interval, daily, weekly, or cron schedule",
-      readiness: input.schedules.length > 0 ? "ready" : "needs_setup"
+      value: schedules[0] ? formatDateTime(schedules[0].next_due_at) : "Not scheduled",
+      detail: schedules[0] ? describeSchedule(schedules[0].schedule) : "Create an interval, daily, weekly, or cron schedule",
+      readiness: schedules.length > 0 ? "ready" : "needs_setup"
     },
     {
       label: "Latest backup",
@@ -231,7 +238,7 @@ export function buildDashboardStats(input: DashboardInput): DashboardStat[] {
     {
       label: "DR readiness",
       value: input.drReport ? sentenceCase(input.drReport.readiness) : "Unknown",
-      detail: input.drReport?.findings[0] ?? "DR report will evaluate jobs, runs, and failures",
+      detail: drFindings[0] ?? "DR report will evaluate jobs, runs, and failures",
       readiness: input.drReport?.readiness ?? "needs_setup"
     }
   ];

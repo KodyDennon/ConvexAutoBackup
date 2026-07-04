@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-beta.5
+
+- Fixed the web console release check for beta-only GitHub releases by reading the releases list instead of `/releases/latest`, which returns 404 when only prereleases exist.
+- Hardened dashboard state rendering against partial API responses so missing arrays or DR findings do not crash the React app.
+- Added regression coverage for prerelease update detection and partial runtime API data.
+- Rebuilt the embedded web bundle served by the Rust server.
+
 ## 0.1.0-beta.4
 
 - Reworked the web console setup page into a guided first-run flow that focuses on the next required backup task instead of showing every form at once.

@@ -17,13 +17,13 @@ This guide is for people installing ConvexAutoBackup without needing to understa
 macOS and Linux:
 
 ```bash
-curl -fsSL https://github.com/KodyDennon/ConvexAutoBackup/releases/download/v0.1.0-beta.4/install.sh | sh
+curl -fsSL https://github.com/KodyDennon/ConvexAutoBackup/releases/download/v0.1.0-beta.5/install.sh | sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-iwr https://github.com/KodyDennon/ConvexAutoBackup/releases/download/v0.1.0-beta.4/install.ps1 -OutFile install.ps1
+iwr https://github.com/KodyDennon/ConvexAutoBackup/releases/download/v0.1.0-beta.5/install.ps1 -OutFile install.ps1
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
@@ -38,7 +38,7 @@ The native installers:
 Opt out of autostart:
 
 ```bash
-curl -fsSL https://github.com/KodyDennon/ConvexAutoBackup/releases/download/v0.1.0-beta.4/install.sh | sh -s -- --no-autostart
+curl -fsSL https://github.com/KodyDennon/ConvexAutoBackup/releases/download/v0.1.0-beta.5/install.sh | sh -s -- --no-autostart
 ```
 
 Windows:
@@ -56,7 +56,7 @@ http://localhost:8976
 ## Docker Install Script
 
 ```bash
-curl -fsSL https://github.com/KodyDennon/ConvexAutoBackup/releases/download/v0.1.0-beta.4/docker-setup.sh | sh
+curl -fsSL https://github.com/KodyDennon/ConvexAutoBackup/releases/download/v0.1.0-beta.5/docker-setup.sh | sh
 ```
 
 The Docker setup script writes a persistent install directory, generates a master key, starts the supervised service, and checks health.
@@ -66,33 +66,33 @@ The Docker setup script writes a persistent install directory, generates a maste
 Docker Hub:
 
 ```bash
-docker pull kodydoty/convex-autobackup:v0.1.0-beta.4
+docker pull kodydoty/convex-autobackup:v0.1.0-beta.5
 docker run -d \
   --name convex-autobackup \
   --restart unless-stopped \
   -p 8976:8976 \
   -v convex-autobackup-data:/data \
   -e CONVEX_AUTOBACKUP_MASTER_KEY="$(openssl rand -base64 32)" \
-  kodydoty/convex-autobackup:v0.1.0-beta.4
+  kodydoty/convex-autobackup:v0.1.0-beta.5
 ```
 
 GHCR:
 
 ```bash
-docker pull ghcr.io/kodydennon/convex-autobackup:v0.1.0-beta.4
+docker pull ghcr.io/kodydennon/convex-autobackup:v0.1.0-beta.5
 docker run -d \
   --name convex-autobackup \
   --restart unless-stopped \
   -p 8976:8976 \
   -v convex-autobackup-data:/data \
   -e CONVEX_AUTOBACKUP_MASTER_KEY="$(openssl rand -base64 32)" \
-  ghcr.io/kodydennon/convex-autobackup:v0.1.0-beta.4
+  ghcr.io/kodydennon/convex-autobackup:v0.1.0-beta.5
 ```
 
 ## Cargo Install
 
 ```bash
-cargo install convex-autobackup --version 0.1.0-beta.4
+cargo install convex-autobackup --version 0.1.0-beta.5
 convex-autobackup runner install --json
 convex-autobackup supervise
 ```

@@ -30,6 +30,7 @@ import {
 import { TOKEN_STORAGE_KEY } from "./constants";
 import { AuthShell, BootstrapForm, LoginForm } from "./components/auth";
 import { NavButton, SystemMessages } from "./components/common";
+import { buildUpdateNotice, fetchLatestInstallableRelease } from "./releases";
 import { AuditSection } from "./sections/audit";
 import { Dashboard, dashboardStats } from "./sections/dashboard";
 import { DrSection } from "./sections/dr";
@@ -54,6 +55,16 @@ const emptyState: ServiceState = {
   auditEvents: [],
   drReport: null
 };
+
+function normalizeDrReport(report: DrReport | null | undefined): DrReport | null {
+  if (!report) {
+    return null;
+  }
+  return {
+    ...report,
+    findings: Array.isArray(report.findings) ? report.findings : []
+  };
+}
 
 function App() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_STORAGE_KEY));
@@ -106,17 +117,17 @@ function App() {
 
       setState({
         health,
-        users: users.users,
-        tokens: tokens.api_tokens,
-        secrets: secrets.secrets,
-        projects: projects.projects,
-        targets: targets.targets,
-        destinations: destinations.destinations,
-        jobs: jobs.jobs,
-        schedules: schedules.schedules,
-        runs: runs.runs,
-        auditEvents: auditEvents.audit_events,
-        drReport: drReport.dr_report
+        users: users.users ?? [],
+        tokens: tokens.api_tokens ?? [],
+        secrets: secrets.secrets ?? [],
+        projects: projects.projects ?? [],
+        targets: targets.targets ?? [],
+        destinations: destinations.destinations ?? [],
+        jobs: jobs.jobs ?? [],
+        schedules: schedules.schedules ?? [],
+        runs: runs.runs ?? [],
+        auditEvents: auditEvents.audit_events ?? [],
+        drReport: normalizeDrReport(drReport.dr_report)
       });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to load service state");
@@ -133,17 +144,9 @@ function App() {
     const version = state.health?.version;
     if (!version) return;
     const controller = new AbortController();
-    void fetch("https://api.github.com/repos/KodyDennon/ConvexAutoBackup/releases/latest", {
-      signal: controller.signal,
-      headers: { Accept: "application/vnd.github+json" }
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((release: { tag_name?: string; html_url?: string } | null) => {
-        if (!release?.tag_name) return;
-        const current = version.startsWith("v") ? version : `v${version}`;
-        if (release.tag_name !== current) {
-          setUpdateNotice(`Update available: ${release.tag_name}. Download it from ${release.html_url ?? "GitHub Releases"}.`);
-        }
+    void fetchLatestInstallableRelease(controller.signal)
+      .then((release) => {
+        setUpdateNotice(buildUpdateNotice(version, release));
       })
       .catch(() => {
         setUpdateNotice(null);
