@@ -178,6 +178,7 @@ impl ConvexExporter for CommandConvexExporter {
             command.args(&self.prefix_args);
             command.args(&args);
             command.env("CONVEX_DEPLOY_KEY", &request.deploy_key);
+            command.env("PATH", build_enhanced_path());
 
             let output = command
                 .output()
@@ -208,6 +209,7 @@ impl ConvexImporter for CommandConvexImporter {
             command.args(&self.prefix_args);
             command.args(&args);
             command.env("CONVEX_DEPLOY_KEY", &request.deploy_key);
+            command.env("PATH", build_enhanced_path());
 
             let output = command
                 .output()
@@ -224,6 +226,47 @@ impl ConvexImporter for CommandConvexImporter {
             Ok(String::from_utf8_lossy(&output.stdout).to_string())
         })
     }
+}
+
+fn build_enhanced_path() -> String {
+    let current_path = std::env::var("PATH").unwrap_or_default();
+    let mut paths: Vec<String> = current_path
+        .split(':')
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect();
+
+    if let Ok(home) = std::env::var("HOME") {
+        let nvm_node_dir = std::path::Path::new(&home).join(".nvm/versions/node");
+        if nvm_node_dir.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&nvm_node_dir) {
+                for entry in entries.flatten() {
+                    let bin_dir = entry.path().join("bin");
+                    if bin_dir.join("node").is_file() {
+                        let bin_str = bin_dir.display().to_string();
+                        if !paths.contains(&bin_str) {
+                            paths.insert(0, bin_str);
+                        }
+                    }
+                }
+            }
+        }
+        let local_bin = format!("{home}/.local/bin");
+        if !paths.contains(&local_bin) {
+            paths.push(local_bin);
+        }
+        let bun_bin = format!("{home}/.bun/bin");
+        if !paths.contains(&bun_bin) {
+            paths.push(bun_bin);
+        }
+    }
+    for standard in &["/usr/local/bin", "/usr/bin", "/bin"] {
+        let s = standard.to_string();
+        if !paths.contains(&s) {
+            paths.push(s);
+        }
+    }
+    paths.join(":")
 }
 
 pub fn resolve_deploy_key(target: &ConvexTarget) -> Result<String> {
