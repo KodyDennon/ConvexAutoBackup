@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import {
   Activity,
   DatabaseBackup,
+  FolderGit2,
   HardDrive,
   ListChecks,
   LogOut,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import {
   ApiClient,
+  filterStateByProject,
   type ApiToken,
   type AuditEvent,
   type BackupJob,
@@ -69,6 +71,7 @@ function normalizeDrReport(report: DrReport | null | undefined): DrReport | null
 function App() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_STORAGE_KEY));
   const [activeSection, setActiveSection] = useState<ActiveSection>("dashboard");
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("all");
   const [state, setState] = useState<ServiceState>(emptyState);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -194,8 +197,16 @@ function App() {
     }
   };
 
-  const stats = useMemo(() => dashboardStats(state), [state]);
+  const scopedState = useMemo(() => filterStateByProject(state, selectedProjectId), [state, selectedProjectId]);
+  const stats = useMemo(() => dashboardStats(scopedState), [scopedState]);
   const isBackupRunning = (state.runs ?? []).some((r) => r.run.status === "queued") || actionLoading !== null;
+
+  const handleRunJob = (jobId: string) => {
+    void perform(`run-${jobId}`, async () => {
+      await client.request(`/api/v1/jobs/${jobId}/run`, { method: "POST" });
+      return "Backup run finished.";
+    });
+  };
 
   if (loading && !state.health) {
     return (
@@ -233,6 +244,8 @@ function App() {
       </AuthShell>
     );
   }
+
+  const selectedProjectObj = (state.projects ?? []).find((p) => p.id === selectedProjectId);
 
   return (
     <main className="shell">
@@ -276,6 +289,22 @@ function App() {
             </p>
           </div>
           <div className="topbar-actions">
+            {/* Project Scope Switcher */}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", background: "#ffffff", border: "1px solid #cbd5e1", padding: "0.4rem 0.85rem", borderRadius: "8px", boxShadow: "0 1px 2px rgba(0,0,0,0.04)" }}>
+              <FolderGit2 size={16} style={{ color: "#0284c7" }} />
+              <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.03em" }}>Project Scope:</span>
+              <select
+                value={selectedProjectId}
+                onChange={(e) => setSelectedProjectId(e.target.value)}
+                style={{ border: "none", background: "transparent", fontWeight: 700, fontSize: "0.85rem", color: "#0f172a", cursor: "pointer", outline: "none" }}
+              >
+                <option value="all">⚡ All Projects ({(state.projects ?? []).length})</option>
+                {(state.projects ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>📁 {p.name}</option>
+                ))}
+              </select>
+            </div>
+
             <div
               style={{
                 display: "flex",
@@ -302,6 +331,21 @@ function App() {
           </div>
         </header>
 
+        {selectedProjectId !== "all" && selectedProjectObj && (
+          <div style={{ background: "#f0f9ff", border: "1px solid #bae6fd", padding: "0.6rem 1rem", borderRadius: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.85rem", color: "#0369a1", marginBottom: "1rem" }}>
+            <span>
+              <strong>Filtered View:</strong> Showing targets, runs, and disaster recovery stats isolated to project <strong>{selectedProjectObj.name}</strong>.
+            </span>
+            <button
+              type="button"
+              className="secondary-button small"
+              onClick={() => setSelectedProjectId("all")}
+            >
+              Reset to All Projects
+            </button>
+          </div>
+        )}
+
         {isBackupRunning && (
           <div className="live-banner">
             <RefreshCw className="spin" size={18} />
@@ -311,9 +355,17 @@ function App() {
 
         <SystemMessages error={error} notice={notice ?? updateNotice} oneTimeToken={oneTimeToken} />
 
-        {activeSection === "dashboard" && <Dashboard stats={stats} state={state} />}
+        {activeSection === "dashboard" && (
+          <Dashboard
+            stats={stats}
+            state={scopedState}
+            onSelectProject={setSelectedProjectId}
+            onRunJob={handleRunJob}
+            actionLoading={actionLoading}
+          />
+        )}
         {activeSection === "setup" && <SetupSection client={client} state={state} actionLoading={actionLoading} perform={perform} />}
-        {activeSection === "runs" && <RunsSection client={client} state={state} actionLoading={actionLoading} perform={perform} />}
+        {activeSection === "runs" && <RunsSection client={client} state={scopedState} actionLoading={actionLoading} perform={perform} />}
         {activeSection === "security" && (
           <SecuritySection
             client={client}
@@ -323,7 +375,7 @@ function App() {
             onTokenCreated={setOneTimeToken}
           />
         )}
-        {activeSection === "dr" && <DrSection client={client} state={state} actionLoading={actionLoading} perform={perform} />}
+        {activeSection === "dr" && <DrSection client={client} state={scopedState} actionLoading={actionLoading} perform={perform} />}
         {activeSection === "audit" && <AuditSection events={state.auditEvents} />}
       </section>
     </main>

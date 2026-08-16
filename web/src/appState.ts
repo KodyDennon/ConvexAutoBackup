@@ -323,3 +323,25 @@ export function formatDurationMs(ms?: number | null): string {
   const remSecs = Math.round((ms % 60000) / 1000);
   return `${mins}m ${remSecs}s`;
 }
+
+export function filterStateByProject(state: ServiceState, projectId: string | null): ServiceState {
+  if (!projectId || projectId === "all") {
+    return state;
+  }
+  const filteredProjects = state.projects.filter((p) => p.id === projectId);
+  const filteredTargets = state.targets.filter((t) => t.project_id === projectId);
+  const targetIds = new Set(filteredTargets.map((t) => t.id));
+  const filteredJobs = state.jobs.filter((j) => j.project_id === projectId || targetIds.has(j.target_id));
+  const jobIds = new Set(filteredJobs.map((j) => j.id));
+  const filteredSchedules = state.schedules.filter((s) => jobIds.has(s.job_id));
+  const filteredRuns = state.runs.filter((r) => jobIds.has(r.run.job_id));
+
+  return {
+    ...state,
+    projects: filteredProjects,
+    targets: filteredTargets,
+    jobs: filteredJobs,
+    schedules: filteredSchedules,
+    runs: filteredRuns
+  };
+}
