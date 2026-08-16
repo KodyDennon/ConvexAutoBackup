@@ -197,6 +197,7 @@ async fn main() -> Result<()> {
                         project_id,
                         name,
                         deployment,
+                        url: None,
                         deploy_key_env,
                         deploy_key_secret_id,
                     })?;

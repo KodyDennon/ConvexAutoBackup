@@ -87,7 +87,7 @@ impl AppDatabase {
             name: input.name,
             kind: ConvexTargetKind::Cloud,
             deployment: input.deployment,
-            url: None,
+            url: input.url,
             secret,
         };
         let connection = self.connection()?;
@@ -394,7 +394,7 @@ impl AppDatabase {
         Ok(project)
     }
 
-    pub fn update_target(&self, id: Uuid, name: &str, deployment: &str, secret_id: Option<Uuid>) -> Result<ConvexTarget> {
+    pub fn update_target(&self, id: Uuid, name: &str, deployment: &str, url: Option<&str>, secret_id: Option<Uuid>) -> Result<ConvexTarget> {
         require_non_empty("target name", name)?;
         require_non_empty("deployment", deployment)?;
         let connection = self.connection()?;
@@ -402,13 +402,13 @@ impl AppDatabase {
         if let Some(secret_id) = secret_id {
             self.require_secret(secret_id)?;
             connection.execute(
-                "UPDATE targets SET name = ?1, deployment = ?2, secret_id = ?3 WHERE id = ?4",
-                params![name, deployment, secret_id.to_string(), id.to_string()],
+                "UPDATE targets SET name = ?1, deployment = ?2, url = ?3, secret_id = ?4 WHERE id = ?5",
+                params![name, deployment, url, secret_id.to_string(), id.to_string()],
             )?;
         } else {
             connection.execute(
-                "UPDATE targets SET name = ?1, deployment = ?2 WHERE id = ?3",
-                params![name, deployment, id.to_string()],
+                "UPDATE targets SET name = ?1, deployment = ?2, url = ?3 WHERE id = ?4",
+                params![name, deployment, url, id.to_string()],
             )?;
         }
 

@@ -28,6 +28,8 @@ pub struct CreateCloudTarget {
     pub name: String,
     pub deployment: String,
     #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
     pub deploy_key_env: Option<String>,
     #[serde(default)]
     pub deploy_key_secret_id: Option<Uuid>,

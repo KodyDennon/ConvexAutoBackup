@@ -655,6 +655,7 @@ async fn update_project(
 struct UpdateTargetInput {
     name: String,
     deployment: String,
+    url: Option<String>,
     secret_id: Option<Uuid>,
 }
 
@@ -665,7 +666,7 @@ async fn update_target(
     Json(input): Json<UpdateTargetInput>,
 ) -> Result<Json<ConvexTarget>, ApiError> {
     require_role(&state, &headers, RoleRequirement::Manage)?;
-    let updated = state.database.update_target(target_id, &input.name, &input.deployment, input.secret_id)?;
+    let updated = state.database.update_target(target_id, &input.name, &input.deployment, input.url.as_deref(), input.secret_id)?;
     Ok(Json(updated))
 }
 

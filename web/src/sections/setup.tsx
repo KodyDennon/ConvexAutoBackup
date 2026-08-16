@@ -252,7 +252,10 @@ function TabWorkspace({
       <div className="tab-container stack">
         <div className="info-banner">
           <strong>Step 3: Connect Convex Deployment Target</strong>
-          <p>Link your Project to your Convex Deployment Name (e.g. <code>happy-animal-123</code>) and select the corresponding Deploy Key.</p>
+          <p>
+            Link your Project to your Convex Deployment Name (e.g. <code>happy-animal-123</code>).
+            Convex Cloud URLs are automatically resolved: <strong>Cloud Data URL</strong> = <code>https://&lt;deployment&gt;.convex.cloud</code> | <strong>Actions Site URL</strong> = <code>https://&lt;deployment&gt;.convex.site</code>.
+          </p>
         </div>
         <div className="grid split-even">
           <TargetForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
@@ -656,6 +659,7 @@ function TargetForm({ client, state, actionLoading, perform }: { client: ApiClie
   const [projectId, setProjectId] = useState("");
   const [name, setName] = useState("");
   const [deployment, setDeployment] = useState("");
+  const [url, setUrl] = useState("");
   const [secretId, setSecretId] = useState("");
 
   useEffect(() => {
@@ -677,12 +681,14 @@ function TargetForm({ client, state, actionLoading, perform }: { client: ApiClie
               project_id: projectId,
               name,
               deployment,
+              url: url.trim() || undefined,
               deploy_key_secret_id: secretId || null
             })
           });
           setName("");
           setDeployment("");
-          return "Convex cloud target created.";
+          setUrl("");
+          return "Convex target created.";
         })
       }
     >
@@ -694,6 +700,12 @@ function TargetForm({ client, state, actionLoading, perform }: { client: ApiClie
       </Field>
       <Field label="Convex deployment name">
         <input value={deployment} onChange={(event) => setDeployment(event.target.value)} placeholder="e.g. happy-animal-123" required />
+      </Field>
+      <Field label="Convex Cloud / Data API URL (Optional)">
+        <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder={deployment ? `https://${deployment}.convex.cloud` : "https://<deployment>.convex.cloud"} />
+        <span className="subtle" style={{ fontSize: "0.78rem", marginTop: "0.25rem", display: "block" }}>
+          Cloud Data URL: <code>https://{deployment || "<deployment>"}.convex.cloud</code> | Actions Site URL: <code>https://{deployment || "<deployment>"}.convex.site</code>
+        </span>
       </Field>
       <Field label="Deploy key secret">
         <Select value={secretId} onChange={setSecretId} items={(state.secrets ?? []).map((secret) => [secret.id, secret.label])} required />

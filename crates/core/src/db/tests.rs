@@ -23,6 +23,7 @@ fn database_persists_project_destination_target_and_job() {
             project_id: project.id,
             name: "Production".to_string(),
             deployment: "prod:careful-otter-123".to_string(),
+            url: None,
             deploy_key_env: Some("CONVEX_DEPLOY_KEY_CLIENT_A".to_string()),
             deploy_key_secret_id: None,
         })
@@ -72,6 +73,7 @@ fn database_persists_and_finds_due_schedules() {
             project_id: project.id,
             name: "Prod".to_string(),
             deployment: "prod:careful-otter-123".to_string(),
+            url: None,
             deploy_key_env: Some("PATH".to_string()),
             deploy_key_secret_id: None,
         })

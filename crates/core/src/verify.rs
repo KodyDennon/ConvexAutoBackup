@@ -119,6 +119,7 @@ mod tests {
                 project_id: project.id,
                 name: "Prod".to_string(),
                 deployment: "prod:careful-otter-123".to_string(),
+                url: None,
                 deploy_key_env: Some("PATH".to_string()),
                 deploy_key_secret_id: None,
             })
