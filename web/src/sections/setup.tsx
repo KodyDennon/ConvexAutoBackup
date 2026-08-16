@@ -818,10 +818,25 @@ function JobForm({ client, state, actionLoading, perform }: { client: ApiClient;
   const [includeFileStorage, setIncludeFileStorage] = useState(true);
 
   useEffect(() => {
-    if (!projectId && state.projects?.[0]) setProjectId(state.projects[0].id);
-    if (!targetId && state.targets?.[0]) setTargetId(state.targets[0].id);
-    if (!destinationId && state.destinations?.[0]) setDestinationId(state.destinations[0].id);
-  }, [destinationId, projectId, state.destinations, state.projects, state.targets, targetId]);
+    if (!projectId && state.projects?.[0]) {
+      setProjectId(state.projects[0].id);
+    }
+    if (!destinationId && state.destinations?.[0]) {
+      setDestinationId(state.destinations[0].id);
+    }
+  }, [destinationId, projectId, state.destinations, state.projects]);
+
+  const availableTargets = (state.targets ?? []).filter((t) => t.project_id === projectId);
+
+  useEffect(() => {
+    if (availableTargets.length > 0) {
+      if (!availableTargets.some((t) => t.id === targetId)) {
+        setTargetId(availableTargets[0].id);
+      }
+    } else {
+      setTargetId("");
+    }
+  }, [projectId, availableTargets, targetId]);
 
   return (
     <ResourceForm
@@ -831,6 +846,9 @@ function JobForm({ client, state, actionLoading, perform }: { client: ApiClient;
       submitLabel="Create job"
       onSubmit={() =>
         perform("job", async () => {
+          if (!targetId) {
+            throw new Error("Please select a valid Convex Target for this project.");
+          }
           await client.request("/api/v1/jobs", {
             method: "POST",
             body: JSON.stringify({
@@ -841,20 +859,31 @@ function JobForm({ client, state, actionLoading, perform }: { client: ApiClient;
               include_file_storage: includeFileStorage
             })
           });
-          return "Backup job created.";
+          return `Backup job "${name}" created successfully.`;
         })
       }
     >
       <Field label="Job name">
         <input value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Daily Production Export" required />
       </Field>
-      <Field label="Project">
+      <Field label="Assigned Project">
         <Select value={projectId} onChange={setProjectId} items={(state.projects ?? []).map((project) => [project.id, project.name])} required />
       </Field>
-      <Field label="Convex target">
-        <Select value={targetId} onChange={setTargetId} items={(state.targets ?? []).map((target) => [target.id, target.name])} required />
+      <Field label="Convex Target Deployment (Filtered to Project)">
+        {availableTargets.length === 0 ? (
+          <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", padding: "0.6rem 0.85rem", borderRadius: "6px", fontSize: "0.82rem", color: "#991b1b" }}>
+            ⚠️ No target connected to this project yet. Please go to <strong>Step 3. Targets</strong> and add a target deployment for this project first.
+          </div>
+        ) : (
+          <Select
+            value={targetId}
+            onChange={setTargetId}
+            items={availableTargets.map((target) => [target.id, `${target.name} (${target.deployment})`])}
+            required
+          />
+        )}
       </Field>
-      <Field label="Storage destination">
+      <Field label="Storage Vault Destination">
         <Select value={destinationId} onChange={setDestinationId} items={(state.destinations ?? []).map((destination) => [destination.id, destination.name])} required />
       </Field>
     </ResourceForm>

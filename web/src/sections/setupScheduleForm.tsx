@@ -53,8 +53,19 @@ export function ScheduleForm({
         })
       }
     >
-      <Field label="Job">
-        <Select value={jobId} onChange={setJobId} items={state.jobs.map((job) => [job.id, job.name])} required />
+      <Field label="Target Job">
+        <Select
+          value={jobId}
+          onChange={setJobId}
+          items={state.jobs.map((job) => {
+            const proj = state.projects.find((p) => p.id === job.project_id);
+            const target = state.targets.find((t) => t.id === job.target_id);
+            const projName = proj?.name ?? "Project";
+            const targetDep = target?.deployment ?? "Target";
+            return [job.id, `[${projName}] ${job.name} → ${targetDep}`];
+          })}
+          required
+        />
       </Field>
       <Field label="Mode">
         <select value={mode} onChange={(event) => setMode(event.target.value as "interval_minutes" | "daily" | "weekly" | "cron")}>

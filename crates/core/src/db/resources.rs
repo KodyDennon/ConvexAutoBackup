@@ -245,6 +245,13 @@ impl AppDatabase {
             params![job.destination_id.to_string()],
             destination_from_row,
         )?;
+        if target.project_id != job.project_id {
+            return Err(error!(
+                "Safety assertion error: Job project ID ({}) does not match Target project ID ({}). Job execution aborted.",
+                job.project_id, target.project_id
+            ));
+        }
+
         Ok(JobBundle {
             project,
             target,
