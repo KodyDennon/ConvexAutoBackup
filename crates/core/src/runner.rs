@@ -55,6 +55,24 @@ pub fn convex_runner_dir(data_dir: &Path) -> PathBuf {
     data_dir.join("runner")
 }
 
+pub fn ensure_runner_dir(data_dir: &Path) -> PathBuf {
+    let runner_dir = convex_runner_dir(data_dir);
+    let _ = std::fs::create_dir_all(&runner_dir);
+    let pkg_json = runner_dir.join("package.json");
+    if !pkg_json.exists() {
+        let content = serde_json::json!({
+            "name": "convex-autobackup-runner",
+            "private": true,
+            "description": "Managed runner environment for ConvexAutoBackup",
+            "dependencies": {
+                "convex": "^1.18.0"
+            }
+        });
+        let _ = std::fs::write(&pkg_json, serde_json::to_string_pretty(&content).unwrap_or_default());
+    }
+    runner_dir
+}
+
 pub fn managed_convex_bin(data_dir: &Path) -> PathBuf {
     let bin_name = if cfg!(windows) {
         "convex.cmd"

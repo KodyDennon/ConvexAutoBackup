@@ -1,7 +1,7 @@
 use crate::{ConvexTarget, ConvexTargetKind, managed_convex_bin};
 use crate::{Result, ResultContext, error};
 use std::future::Future;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use tokio::process::Command;
 
@@ -40,12 +40,14 @@ pub trait ConvexImporter: Send + Sync {
 pub struct CommandConvexExporter {
     program: String,
     prefix_args: Vec<String>,
+    pub work_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
 pub struct CommandConvexImporter {
     program: String,
     prefix_args: Vec<String>,
+    pub work_dir: Option<PathBuf>,
 }
 
 impl Default for CommandConvexExporter {
@@ -66,28 +68,35 @@ impl Default for CommandConvexImporter {
 
 impl CommandConvexExporter {
     pub fn for_data_dir(data_dir: &Path) -> Self {
+        let runner_dir = crate::runner::ensure_runner_dir(data_dir);
         if let Ok(program) = std::env::var("CONVEX_AUTOBACKUP_CONVEX_BIN") {
-            return Self::from_program(program);
+            let mut exporter = Self::from_program(program);
+            exporter.work_dir = Some(runner_dir);
+            return exporter;
         }
         let managed = managed_convex_bin(data_dir);
         if managed.is_file() {
             return Self {
                 program: managed.display().to_string(),
                 prefix_args: Vec::new(),
+                work_dir: Some(runner_dir),
             };
         }
-        Self::default()
+        let mut exporter = Self::default();
+        exporter.work_dir = Some(runner_dir);
+        exporter
     }
 
     fn from_program(program: String) -> Self {
         let prefix_args = if program.ends_with("npx") || program.ends_with("npx.cmd") {
-            vec!["convex".to_string()]
+            vec!["-y".to_string(), "convex".to_string()]
         } else {
             Vec::new()
         };
         Self {
             program,
             prefix_args,
+            work_dir: None,
         }
     }
 
@@ -118,28 +127,35 @@ impl CommandConvexExporter {
 
 impl CommandConvexImporter {
     pub fn for_data_dir(data_dir: &Path) -> Self {
+        let runner_dir = crate::runner::ensure_runner_dir(data_dir);
         if let Ok(program) = std::env::var("CONVEX_AUTOBACKUP_CONVEX_BIN") {
-            return Self::from_program(program);
+            let mut importer = Self::from_program(program);
+            importer.work_dir = Some(runner_dir);
+            return importer;
         }
         let managed = managed_convex_bin(data_dir);
         if managed.is_file() {
             return Self {
                 program: managed.display().to_string(),
                 prefix_args: Vec::new(),
+                work_dir: Some(runner_dir),
             };
         }
-        Self::default()
+        let mut importer = Self::default();
+        importer.work_dir = Some(runner_dir);
+        importer
     }
 
     fn from_program(program: String) -> Self {
         let prefix_args = if program.ends_with("npx") || program.ends_with("npx.cmd") {
-            vec!["convex".to_string()]
+            vec!["-y".to_string(), "convex".to_string()]
         } else {
             Vec::new()
         };
         Self {
             program,
             prefix_args,
+            work_dir: None,
         }
     }
 
@@ -175,6 +191,11 @@ impl ConvexExporter for CommandConvexExporter {
         Box::pin(async move {
             let args = Self::command_args(&request, output_path);
             let mut command = Command::new(&self.program);
+            if let Some(work_dir) = &self.work_dir {
+                if work_dir.is_dir() {
+                    command.current_dir(work_dir);
+                }
+            }
             command.args(&self.prefix_args);
             command.args(&args);
             command.env("CONVEX_DEPLOY_KEY", &request.deploy_key);
@@ -206,6 +227,11 @@ impl ConvexImporter for CommandConvexImporter {
         Box::pin(async move {
             let args = Self::command_args(&request, archive_path);
             let mut command = Command::new(&self.program);
+            if let Some(work_dir) = &self.work_dir {
+                if work_dir.is_dir() {
+                    command.current_dir(work_dir);
+                }
+            }
             command.args(&self.prefix_args);
             command.args(&args);
             command.env("CONVEX_DEPLOY_KEY", &request.deploy_key);
