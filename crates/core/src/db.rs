@@ -39,6 +39,7 @@ pub struct CreateCloudTarget {
 pub struct CreateLocalDestination {
     pub name: String,
     pub root: String,
+    #[serde(default)]
     pub retention: RetentionPolicy,
 }
 
@@ -46,11 +47,20 @@ pub struct CreateLocalDestination {
 pub struct CreateS3Destination {
     pub name: String,
     pub bucket: String,
+    #[serde(default)]
     pub region: Option<String>,
+    #[serde(default)]
     pub endpoint: Option<String>,
+    #[serde(default)]
     pub prefix: Option<String>,
-    pub credentials_secret_id: Uuid,
+    #[serde(default)]
+    pub credentials_secret_id: Option<Uuid>,
+    #[serde(default)]
     pub retention: RetentionPolicy,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -59,6 +69,7 @@ pub struct CreateScheduledJob {
     pub target_id: Uuid,
     pub destination_id: Uuid,
     pub name: String,
+    #[serde(default = "default_true")]
     pub include_file_storage: bool,
 }
 
@@ -91,7 +102,9 @@ pub struct AuditEvent {
 pub struct CreateJobSchedule {
     pub job_id: Uuid,
     pub schedule: Schedule,
+    #[serde(default)]
     pub missed_run_policy: MissedRunPolicy,
+    #[serde(default = "default_true")]
     pub enabled: bool,
 }
 

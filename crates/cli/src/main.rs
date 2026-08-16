@@ -232,7 +232,7 @@ async fn main() -> Result<()> {
                         region,
                         endpoint,
                         prefix,
-                        credentials_secret_id,
+                        credentials_secret_id: Some(credentials_secret_id),
                         retention: RetentionPolicy::default(),
                     })?;
                     print_output(json, &serde_json::json!({ "destination": destination }))?;

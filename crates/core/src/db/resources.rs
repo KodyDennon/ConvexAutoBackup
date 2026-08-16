@@ -147,7 +147,10 @@ impl AppDatabase {
     pub fn create_s3_destination(&self, input: CreateS3Destination) -> Result<StorageDestination> {
         require_non_empty("destination name", &input.name)?;
         require_non_empty("bucket", &input.bucket)?;
-        self.require_secret(input.credentials_secret_id)?;
+        let secret_id = input.credentials_secret_id.unwrap_or_else(Uuid::nil);
+        if secret_id != Uuid::nil() {
+            self.require_secret(secret_id)?;
+        }
         let destination = StorageDestination {
             id: Uuid::now_v7(),
             team_id: self.default_team_id()?,
@@ -158,7 +161,7 @@ impl AppDatabase {
                 endpoint: input.endpoint,
                 prefix: input.prefix,
                 credentials: SecretRef {
-                    id: input.credentials_secret_id,
+                    id: secret_id,
                     label: "s3_credentials".to_string(),
                 },
             },

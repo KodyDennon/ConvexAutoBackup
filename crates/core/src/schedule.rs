@@ -11,9 +11,10 @@ pub enum Schedule {
     Cron { expression: String },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum MissedRunPolicy {
+    #[default]
     RunOnceOnResume,
     Skip,
 }

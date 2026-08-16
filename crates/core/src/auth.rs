@@ -13,6 +13,7 @@ use uuid::Uuid;
 pub struct CreateUser {
     pub email: String,
     pub password: String,
+    #[serde(default)]
     pub role: Role,
 }
 
@@ -49,6 +50,12 @@ pub enum Role {
     Admin,
     Operator,
     Viewer,
+}
+
+impl Default for Role {
+    fn default() -> Self {
+        Role::Owner
+    }
 }
 
 impl Role {
