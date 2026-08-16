@@ -15,7 +15,7 @@ importers:
         specifier: ^1.23.0
         version: 1.31.0(react@19.2.8)
       react:
-        specifier: ^19.2.3
+        specifier: ^19.2.8
         version: 19.2.8
       react-dom:
         specifier: ^19.2.3
@@ -28,7 +28,7 @@ importers:
         version: 8.2.1
     devDependencies:
       '@types/react':
-        specifier: ^19.2.8
+        specifier: ^19.2.18
         version: 19.2.18
       '@types/react-dom':
         specifier: ^19.2.3
