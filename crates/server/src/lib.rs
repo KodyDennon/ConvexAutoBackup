@@ -98,6 +98,7 @@ pub fn router_with_state(state: AppState) -> Router {
         .route("/api/v1/restore", post(restore_backup_run))
         .route("/api/v1/dr/report", get(dr_report))
         .route("/api/v1/audit", get(list_audit_events))
+        .route("/api/v1/system/update", post(system_update))
         .route("/api/v1/jobs/{job_id}/run", post(run_job))
         .route("/api/v1/runs", get(list_runs))
         .layer(CorsLayer::permissive())
@@ -670,6 +671,26 @@ async fn update_target(
     require_role(&state, &headers, RoleRequirement::Manage)?;
     let updated = state.database.update_target(target_id, &input.name, &input.deployment, input.url.as_deref(), input.secret_id)?;
     Ok(Json(updated))
+}
+
+async fn system_update(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_role(&state, &headers, RoleRequirement::Manage)?;
+    let script_path = PathBuf::from("/home/user/projects/ConvexAutoBackup/scripts/update.sh");
+    if script_path.exists() {
+        tokio::spawn(async move {
+            let _ = tokio::process::Command::new("bash")
+                .arg(script_path)
+                .output()
+                .await;
+        });
+    }
+    Ok(Json(serde_json::json!({
+        "status": "updating",
+        "message": "System update initiated. Rebuilding release workspace and restarting service..."
+    })))
 }
 
 impl From<Error> for ApiError {

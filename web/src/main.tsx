@@ -208,6 +208,13 @@ function App() {
     });
   };
 
+  const handleInstallUpdate = () => {
+    void perform("system-update", async () => {
+      await client.request("/api/v1/system/update", { method: "POST" });
+      return "System update initiated! Rebuilding release workspace binaries and restarting service in background...";
+    });
+  };
+
   if (loading && !state.health) {
     return (
       <main className="center-screen">
@@ -353,7 +360,13 @@ function App() {
           </div>
         )}
 
-        <SystemMessages error={error} notice={notice ?? updateNotice} oneTimeToken={oneTimeToken} />
+        <SystemMessages
+          error={error}
+          notice={notice ?? updateNotice}
+          oneTimeToken={oneTimeToken}
+          onInstallUpdate={handleInstallUpdate}
+          updating={actionLoading === "system-update"}
+        />
 
         {activeSection === "dashboard" && (
           <Dashboard

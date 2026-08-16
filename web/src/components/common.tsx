@@ -117,12 +117,18 @@ export function NavButton({
 export function SystemMessages({
   error,
   notice,
-  oneTimeToken
+  oneTimeToken,
+  onInstallUpdate,
+  updating
 }: {
   error: string | null;
   notice: string | null;
   oneTimeToken: string | null;
+  onInstallUpdate?: () => void;
+  updating?: boolean;
 }) {
+  const isUpdateNotice = notice?.includes("Update available:");
+
   return (
     <div className="system-messages">
       {error && (
@@ -132,9 +138,21 @@ export function SystemMessages({
         </div>
       )}
       {notice && (
-        <div className="alert success">
-          <CheckCircle2 size={18} />
-          <span>{notice}</span>
+        <div className={`alert ${isUpdateNotice ? "info" : "success"}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <CheckCircle2 size={18} />
+            <span>{notice}</span>
+          </div>
+          {isUpdateNotice && onInstallUpdate && (
+            <button
+              type="button"
+              className="primary-button small"
+              disabled={updating}
+              onClick={onInstallUpdate}
+            >
+              {updating ? "Updating Service..." : "⚡ Install System Update Now"}
+            </button>
+          )}
         </div>
       )}
       {oneTimeToken && (
