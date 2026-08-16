@@ -10,7 +10,7 @@ use axum::{
     routing::{delete, get, post},
 };
 use convex_autobackup_core::{
-    AppDatabase, AuthService, BackupEngine, CommandConvexExporter, CommandConvexImporter,
+    AppDatabase, AuthService, BackupEngine, BackupJob, CommandConvexExporter, CommandConvexImporter,
     ConvexTarget, CreateCloudTarget, CreateJobSchedule, CreateLocalDestination, CreateProject,
     CreateS3Destination, CreateScheduledJob, CreateUser, Error, Project, RestoreEngine, Result as AppResult,
     Role, SchedulerService, SecretKind, SecretVault, User, default_data_dir, generate_dr_report,
@@ -87,7 +87,7 @@ pub fn router_with_state(state: AppState) -> Router {
         .route("/api/v1/destinations/s3", post(create_s3_destination))
         .route("/api/v1/destinations/{destination_id}", delete(delete_destination))
         .route("/api/v1/jobs", get(list_jobs).post(create_job))
-        .route("/api/v1/jobs/{job_id}", delete(delete_job))
+        .route("/api/v1/jobs/{job_id}", delete(delete_job).put(update_job))
         .route(
             "/api/v1/schedules",
             get(list_schedules).post(create_schedule),
@@ -691,6 +691,33 @@ async fn system_update(
         "status": "updating",
         "message": "System update initiated. Rebuilding release workspace and restarting service..."
     })))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct UpdateJobInput {
+    name: String,
+    project_id: Uuid,
+    target_id: Uuid,
+    destination_id: Uuid,
+    include_file_storage: bool,
+}
+
+async fn update_job(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(job_id): Path<Uuid>,
+    Json(input): Json<UpdateJobInput>,
+) -> Result<Json<BackupJob>, ApiError> {
+    require_role(&state, &headers, RoleRequirement::Manage)?;
+    let updated = state.database.update_job(
+        job_id,
+        &input.name,
+        input.project_id,
+        input.target_id,
+        input.destination_id,
+        input.include_file_storage,
+    )?;
+    Ok(Json(updated))
 }
 
 impl From<Error> for ApiError {

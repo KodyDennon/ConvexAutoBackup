@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activity, CheckCircle2, DatabaseBackup, HardDrive, KeyRound, Layers, Play, Plus, ShieldCheck, Clock3, Trash2 } from "lucide-react";
+import { Activity, CheckCircle2, DatabaseBackup, HardDrive, KeyRound, Layers, Pencil, Play, Plus, ShieldCheck, Clock3, Trash2 } from "lucide-react";
 import {
   ApiClient,
   destinationLabel,
@@ -145,6 +145,9 @@ function TabWorkspace({
   const jobs = state.jobs ?? [];
   const schedules = state.schedules ?? [];
 
+  const [editingTarget, setEditingTarget] = useState<any | null>(null);
+  const [editingJob, setEditingJob] = useState<any | null>(null);
+
   if (tab === "project") {
     return (
       <div className="tab-container stack">
@@ -288,6 +291,13 @@ function TabWorkspace({
                         <CheckCircle2 size={14} /> Test
                       </button>
                       <button
+                        className="secondary-button small"
+                        type="button"
+                        onClick={() => setEditingTarget(t)}
+                      >
+                        <Pencil size={14} /> Edit
+                      </button>
+                      <button
                         className="danger-button small"
                         type="button"
                         disabled={actionLoading === `delete-target-${t.id}`}
@@ -402,6 +412,13 @@ function TabWorkspace({
                           <Play size={16} /> Run Backup Now
                         </button>
                         <button
+                          className="secondary-button small"
+                          type="button"
+                          onClick={() => setEditingJob(j)}
+                        >
+                          <Pencil size={14} /> Edit
+                        </button>
+                        <button
                           className="danger-button small"
                           type="button"
                           disabled={actionLoading === `delete-job-${j.id}`}
@@ -476,7 +493,28 @@ function TabWorkspace({
     );
   }
 
-  return null;
+  return (
+    <>
+      {editingTarget && (
+        <EditTargetModal
+          target={editingTarget}
+          state={state}
+          client={client}
+          perform={perform}
+          onClose={() => setEditingTarget(null)}
+        />
+      )}
+      {editingJob && (
+        <EditJobModal
+          job={editingJob}
+          state={state}
+          client={client}
+          perform={perform}
+          onClose={() => setEditingJob(null)}
+        />
+      )}
+    </>
+  );
 }
 
 function TaskFrame({ title, detail, children }: { title: string; detail: string; children: React.ReactNode }) {
@@ -619,10 +657,29 @@ function ProjectForm({ client, actionLoading, perform }: { client: ApiClient; ac
   );
 }
 
+function parseDeploymentFromKey(key: string): string | null {
+  const trimmed = key.trim();
+  if (!trimmed) return null;
+  const header = trimmed.includes("|") ? trimmed.split("|")[0] : trimmed;
+  const clean = header.includes(":") ? header.split(":")[1] : header;
+  const sanitized = clean.trim().replace(/[^a-zA-Z0-9_-]/g, "");
+  return sanitized.length > 0 && sanitized.length < 128 ? sanitized : null;
+}
+
 function SecretForm({ client, actionLoading, perform }: { client: ApiClient; actionLoading: string | null; perform: Perform }) {
   const [label, setLabel] = useState("");
   const [kind, setKind] = useState<SecretKind>("convex_deploy_key");
   const [value, setValue] = useState("");
+
+  const detectedDeployment = kind === "convex_deploy_key" ? parseDeploymentFromKey(value) : null;
+
+  const handleValueChange = (val: string) => {
+    setValue(val);
+    const parsed = parseDeploymentFromKey(val);
+    if (parsed && (!label || label.startsWith("Deploy Key:"))) {
+      setLabel(`Deploy Key: ${parsed}`);
+    }
+  };
 
   return (
     <ResourceForm
@@ -638,18 +695,29 @@ function SecretForm({ client, actionLoading, perform }: { client: ApiClient; act
           });
           setLabel("");
           setValue("");
-          return "Encrypted secret saved.";
+          return `Encrypted secret "${label}" saved.`;
         })
       }
     >
-      <Field label="Secret label">
-        <input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="e.g. prod-deploy-key" required />
+      <Field label="Secret Label / Purpose">
+        <input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="e.g. Deploy Key: zany-cheetah-864" required />
       </Field>
-      <Field label="Kind">
+      <Field label="Secret Kind">
         <Select value={kind} onChange={(val) => setKind(val as SecretKind)} items={secretKinds.map((k) => [k, sentenceCase(k)])} required />
       </Field>
-      <Field label="Secret value (Deploy Key)">
-        <input value={value} onChange={(event) => setValue(event.target.value)} type="password" placeholder="prod:deployment-name|..." required />
+      <Field label="Secret Value (Deploy Key)">
+        <input
+          value={value}
+          onChange={(event) => handleValueChange(event.target.value)}
+          type="password"
+          placeholder="prod:deployment-name|..."
+          required
+        />
+        {detectedDeployment && (
+          <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", padding: "0.4rem 0.75rem", borderRadius: "6px", fontSize: "0.82rem", color: "#166534", marginTop: "0.35rem" }}>
+            ✓ Detected Convex Deployment: <strong>{detectedDeployment}</strong>
+          </div>
+        )}
       </Field>
     </ResourceForm>
   );
@@ -905,5 +973,177 @@ function JobForm({ client, state, actionLoading, perform }: { client: ApiClient;
         <Select value={destinationId} onChange={setDestinationId} items={(state.destinations ?? []).map((destination) => [destination.id, destination.name])} required />
       </Field>
     </ResourceForm>
+  );
+}
+
+function EditTargetModal({
+  target,
+  state,
+  client,
+  perform,
+  onClose
+}: {
+  target: any;
+  state: ServiceState;
+  client: ApiClient;
+  perform: Perform;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(target.name);
+  const [deployment, setDeployment] = useState(target.deployment);
+  const [url, setUrl] = useState(target.url ?? "");
+  const [secretId, setSecretId] = useState(target.secret?.id ?? "");
+
+  const deployKeySecrets = (state.secrets ?? []).filter((s) => s.kind === "convex_deploy_key");
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Edit Target Deployment — {target.name}</h3>
+          <button type="button" className="close-btn" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body stack">
+          <Field label="Target Label">
+            <input value={name} onChange={(e) => setName(e.target.value)} required />
+          </Field>
+          <Field label="Convex Deployment Name">
+            <input value={deployment} onChange={(e) => setDeployment(cleanDeploymentName(e.target.value))} required />
+          </Field>
+          <Field label="Convex Cloud / Data API URL (Optional)">
+            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder={`https://${deployment}.convex.cloud`} />
+          </Field>
+          <Field label="Assigned Deploy Key Secret">
+            <Select
+              value={secretId}
+              onChange={setSecretId}
+              items={deployKeySecrets.map((s) => [s.id, `${s.label} (ID: ${s.id.slice(0, 8)})`])}
+              required
+            />
+          </Field>
+        </div>
+        <div className="modal-footer button-row">
+          <button type="button" className="secondary-button" onClick={onClose}>Cancel</button>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() =>
+              void perform(`update-target-${target.id}`, async () => {
+                await client.request(`/api/v1/targets/${target.id}`, {
+                  method: "PUT",
+                  body: JSON.stringify({
+                    name,
+                    deployment: cleanDeploymentName(deployment),
+                    url: url.trim() || undefined,
+                    secret_id: secretId || null
+                  })
+                });
+                onClose();
+                return `Target "${name}" updated.`;
+              })
+            }
+          >
+            Save Target Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditJobModal({
+  job,
+  state,
+  client,
+  perform,
+  onClose
+}: {
+  job: any;
+  state: ServiceState;
+  client: ApiClient;
+  perform: Perform;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(job.name);
+  const [projectId, setProjectId] = useState(job.project_id);
+  const [targetId, setTargetId] = useState(job.target_id);
+  const [destinationId, setDestinationId] = useState(job.destination_id);
+  const [includeFileStorage, setIncludeFileStorage] = useState(job.include_file_storage);
+
+  const availableTargets = (state.targets ?? []).filter((t) => t.project_id === projectId);
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Edit Backup Job — {job.name}</h3>
+          <button type="button" className="close-btn" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body stack">
+          <Field label="Job Name">
+            <input value={name} onChange={(e) => setName(e.target.value)} required />
+          </Field>
+          <Field label="Assigned Project">
+            <Select
+              value={projectId}
+              onChange={(val) => {
+                setProjectId(val);
+                const first = (state.targets ?? []).find((t) => t.project_id === val);
+                if (first) setTargetId(first.id);
+              }}
+              items={(state.projects ?? []).map((p) => [p.id, p.name])}
+              required
+            />
+          </Field>
+          <Field label="Convex Target Deployment (Filtered to Project)">
+            {availableTargets.length === 0 ? (
+              <div style={{ background: "#fef2f2", padding: "0.5rem", borderRadius: "6px", color: "#991b1b", fontSize: "0.82rem" }}>
+                ⚠️ No target connected to this project yet. Please create a target for this project first.
+              </div>
+            ) : (
+              <Select
+                value={targetId}
+                onChange={setTargetId}
+                items={availableTargets.map((t) => [t.id, `${t.name} (${t.deployment})`])}
+                required
+              />
+            )}
+          </Field>
+          <Field label="Storage Vault Destination">
+            <Select
+              value={destinationId}
+              onChange={setDestinationId}
+              items={(state.destinations ?? []).map((d) => [d.id, d.name])}
+              required
+            />
+          </Field>
+        </div>
+        <div className="modal-footer button-row">
+          <button type="button" className="secondary-button" onClick={onClose}>Cancel</button>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() =>
+              void perform(`update-job-${job.id}`, async () => {
+                await client.request(`/api/v1/jobs/${job.id}`, {
+                  method: "PUT",
+                  body: JSON.stringify({
+                    name,
+                    project_id: projectId,
+                    target_id: targetId,
+                    destination_id: destinationId,
+                    include_file_storage: includeFileStorage
+                  })
+                });
+                onClose();
+                return `Backup job "${name}" updated.`;
+              })
+            }
+          >
+            Save Job Changes
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

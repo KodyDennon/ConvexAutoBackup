@@ -424,6 +424,43 @@ impl AppDatabase {
         self.record_audit("system", "target.update", "target", Some(id), &format!("updated target {name}"))?;
         self.get_target(id)
     }
+
+    pub fn update_job(
+        &self,
+        id: Uuid,
+        name: &str,
+        project_id: Uuid,
+        target_id: Uuid,
+        destination_id: Uuid,
+        include_file_storage: bool,
+    ) -> Result<BackupJob> {
+        require_non_empty("job name", name)?;
+        self.require_project(project_id)?;
+        let target = self.get_target(target_id)?;
+        if target.project_id != project_id {
+            return Err(error!(
+                "Project ID mismatch: Target '{}' belongs to project {}, not {}",
+                target.name, target.project_id, project_id
+            ));
+        }
+        self.require_destination(destination_id)?;
+
+        let connection = self.connection()?;
+        connection.execute(
+            "UPDATE jobs SET project_id = ?1, target_id = ?2, destination_id = ?3, name = ?4, include_file_storage = ?5 WHERE id = ?6",
+            params![
+                project_id.to_string(),
+                target_id.to_string(),
+                destination_id.to_string(),
+                name,
+                include_file_storage,
+                id.to_string()
+            ],
+        )?;
+
+        self.record_audit("system", "job.update", "job", Some(id), &format!("updated job {name}"))?;
+        self.get_job(id)
+    }
 }
 
 #[allow(dead_code)]
