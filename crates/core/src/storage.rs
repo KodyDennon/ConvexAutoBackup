@@ -526,6 +526,7 @@ mod tests {
             finished_at: started_at,
             duration_seconds: 0,
             storage_uri: "preupload://test-run".to_string(),
+            inventory: None,
         };
 
         let stored = store_local_backup(

@@ -40,4 +40,5 @@ tower-http = { version = "0.7.0", features = ["cors", "trace"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 uuid = { version = "1.19.0", features = ["serde", "v7"] }
+zip = { version = "2.2.3", default-features = false, features = ["deflate"] }
 firstparty-error = { version = "=0.1.0-beta.6", path = "crates/firstparty-error" }

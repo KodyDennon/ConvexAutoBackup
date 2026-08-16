@@ -403,6 +403,71 @@ export function RunList({ runs, jobs, compact = false }: { runs: RunRecord[]; jo
                       </code>
                     </div>
 
+                    {manifestObj.inventory && (
+                      <div className="stack gap-2" style={{ marginTop: "0.5rem" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                          <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", padding: "0.85rem", borderRadius: "8px" }}>
+                            <span className="subtle" style={{ fontSize: "0.78rem", color: "#166534" }}>Total Documents</span>
+                            <strong style={{ display: "block", fontSize: "1.25rem", color: "#15803d" }}>
+                              {manifestObj.inventory.total_documents?.toLocaleString() ?? 0}
+                            </strong>
+                            <span className="subtle" style={{ fontSize: "0.75rem" }}>
+                              across {manifestObj.inventory.total_tables ?? 0} database tables
+                            </span>
+                          </div>
+                          <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", padding: "0.85rem", borderRadius: "8px" }}>
+                            <span className="subtle" style={{ fontSize: "0.78rem", color: "#1e40af" }}>File Storage Blobs</span>
+                            <strong style={{ display: "block", fontSize: "1.25rem", color: "#1d4ed8" }}>
+                              {manifestObj.inventory.total_storage_files ?? 0} files
+                            </strong>
+                            <span className="subtle" style={{ fontSize: "0.75rem" }}>
+                              {formatBytes(manifestObj.inventory.storage_files_bytes)} total
+                            </span>
+                          </div>
+                        </div>
+
+                        {Array.isArray(manifestObj.inventory.tables) && manifestObj.inventory.tables.length > 0 && (() => {
+                          const activeTables = manifestObj.inventory.tables.filter((t: any) => t.document_count > 0);
+                          const emptyTables = manifestObj.inventory.tables.filter((t: any) => t.document_count === 0);
+                          return (
+                            <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "8px", overflow: "hidden", marginTop: "0.5rem" }}>
+                              <div style={{ background: "#f8fafc", padding: "0.5rem 0.75rem", borderBottom: "1px solid #e2e8f0", fontWeight: 700, fontSize: "0.82rem", color: "#475569", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <span>Table-by-Table Data Breakdown ({activeTables.length} active tables)</span>
+                                {emptyTables.length > 0 && (
+                                  <span className="subtle" style={{ fontSize: "0.75rem", fontWeight: 400 }}>
+                                    {emptyTables.length} empty tables
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ maxHeight: "240px", overflowY: "auto" }}>
+                                {activeTables.map((t: any) => (
+                                  <div key={t.table_name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.45rem 0.75rem", borderBottom: "1px solid #f1f5f9", fontSize: "0.82rem" }}>
+                                    <code style={{ color: "#0284c7", fontWeight: 600 }}>{t.table_name}</code>
+                                    <span>
+                                      <strong>{t.document_count?.toLocaleString()}</strong> docs &bull; <span className="subtle">{formatBytes(t.uncompressed_bytes)}</span>
+                                    </span>
+                                  </div>
+                                ))}
+                                {emptyTables.length > 0 && (
+                                  <details style={{ padding: "0.45rem 0.75rem", fontSize: "0.78rem", background: "#f8fafc" }}>
+                                    <summary style={{ cursor: "pointer", color: "#64748b" }}>Show {emptyTables.length} empty tables (0 docs)</summary>
+                                    <div style={{ marginTop: "0.4rem" }}>
+                                      {emptyTables.map((t: any) => (
+                                        <div key={t.table_name} style={{ display: "flex", justifyContent: "space-between", padding: "0.2rem 0", color: "#94a3b8" }}>
+                                          <code>{t.table_name}</code>
+                                          <span>0 docs</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </details>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+
                     <details style={{ marginTop: "0.5rem" }}>
                       <summary style={{ cursor: "pointer", fontSize: "0.85rem", fontWeight: 600, color: "#64748b" }}>
                         View Raw Technical Manifest JSON
