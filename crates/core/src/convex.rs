@@ -304,6 +304,41 @@ pub fn resolve_deploy_key(target: &ConvexTarget) -> Result<String> {
     })
 }
 
+pub fn extract_deployment_name_from_deploy_key(key: &str) -> Option<String> {
+    let key = key.trim();
+    if key.is_empty() {
+        return None;
+    }
+    let header = if let Some((prefix, _)) = key.split_once('|') {
+        prefix
+    } else {
+        key
+    };
+    let clean = if let Some((_kind, name)) = header.split_once(':') {
+        name.trim()
+    } else {
+        header.trim()
+    };
+    if !clean.is_empty() && !clean.contains(' ') && clean.len() < 128 {
+        Some(clean.to_string())
+    } else {
+        None
+    }
+}
+
+pub fn validate_deploy_key_matches_deployment(deploy_key: &str, target_deployment: &str) -> Result<()> {
+    let target_clean = target_deployment.trim().trim_start_matches("prod:").trim_start_matches("dev:");
+    if let Some(key_deployment) = extract_deployment_name_from_deploy_key(deploy_key) {
+        let key_clean = key_deployment.trim().trim_start_matches("prod:").trim_start_matches("dev:");
+        if key_clean != target_clean && !key_clean.is_empty() && !target_clean.is_empty() {
+            return Err(error!(
+                "Deploy Key Mismatch Error: The provided Deploy Key is issued for deployment '{key_clean}', but target is configured for '{target_clean}'. Execution aborted to prevent cross-deployment data contamination.",
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

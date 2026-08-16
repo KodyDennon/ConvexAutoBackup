@@ -62,6 +62,7 @@ impl RestoreEngine {
         let archive_path = file_uri_to_path(&manifest.storage_uri)?;
         let deploy_key = resolve_deploy_key_from_store(&self.database, &target)
             .or_else(|_| resolve_deploy_key(&target))?;
+        crate::convex::validate_deploy_key_matches_deployment(&deploy_key, &target.deployment)?;
         let import_output = importer
             .import_from_path(
                 ImportRequest {

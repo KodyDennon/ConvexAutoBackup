@@ -53,6 +53,7 @@ impl BackupEngine {
         let result = async {
             let deploy_key = resolve_deploy_key_from_store(&self.database, &bundle.target)
                 .or_else(|_| resolve_deploy_key(&bundle.target))?;
+            crate::convex::validate_deploy_key_matches_deployment(&deploy_key, &bundle.target.deployment)?;
             exporter
                 .export_to_path(
                     ExportRequest {

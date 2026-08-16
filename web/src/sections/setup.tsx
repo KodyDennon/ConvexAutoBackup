@@ -666,10 +666,14 @@ function TargetForm({ client, state, actionLoading, perform }: { client: ApiClie
   const [url, setUrl] = useState("");
   const [secretId, setSecretId] = useState("");
 
+  const deployKeySecrets = (state.secrets ?? []).filter((s) => s.kind === "convex_deploy_key");
+
   useEffect(() => {
     if (!projectId && state.projects?.[0]) setProjectId(state.projects[0].id);
-    if (!secretId && state.secrets?.[0]) setSecretId(state.secrets[0].id);
-  }, [projectId, secretId, state.projects, state.secrets]);
+    if (deployKeySecrets.length > 0 && (!secretId || !deployKeySecrets.some((s) => s.id === secretId))) {
+      setSecretId(deployKeySecrets[0].id);
+    }
+  }, [deployKeySecrets, projectId, secretId, state.projects]);
 
   return (
     <ResourceForm
@@ -679,6 +683,9 @@ function TargetForm({ client, state, actionLoading, perform }: { client: ApiClie
       submitLabel="Create target"
       onSubmit={() =>
         perform("target", async () => {
+          if (!secretId) {
+            throw new Error("Please select a valid Deploy Key secret for this target deployment.");
+          }
           const sanitized = cleanDeploymentName(deployment);
           await client.request("/api/v1/targets/cloud", {
             method: "POST",
@@ -687,17 +694,17 @@ function TargetForm({ client, state, actionLoading, perform }: { client: ApiClie
               name,
               deployment: sanitized,
               url: url.trim() || undefined,
-              deploy_key_secret_id: secretId || null
+              deploy_key_secret_id: secretId
             })
           });
           setName("");
           setDeployment("");
           setUrl("");
-          return "Convex target created.";
+          return `Convex target deployment "${sanitized}" connected.`;
         })
       }
     >
-      <Field label="Project">
+      <Field label="Assigned Project">
         <Select value={projectId} onChange={setProjectId} items={(state.projects ?? []).map((project) => [project.id, project.name])} required />
       </Field>
       <Field label="Target label">
@@ -721,8 +728,19 @@ function TargetForm({ client, state, actionLoading, perform }: { client: ApiClie
           Cloud Data URL: <code>https://{deployment || "deployment-name"}.convex.cloud</code> | Actions Site URL: <code>https://{deployment || "deployment-name"}.convex.site</code>
         </span>
       </Field>
-      <Field label="Deploy key secret">
-        <Select value={secretId} onChange={setSecretId} items={(state.secrets ?? []).map((secret) => [secret.id, secret.label])} required />
+      <Field label="Deploy key secret (Must match deployment key)">
+        {deployKeySecrets.length === 0 ? (
+          <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", padding: "0.6rem 0.85rem", borderRadius: "6px", fontSize: "0.82rem", color: "#991b1b" }}>
+            ⚠️ No Deploy Key stored yet. Please go to <strong>Step 2. Deploy Keys</strong> and save the deploy key for this deployment first.
+          </div>
+        ) : (
+          <Select
+            value={secretId}
+            onChange={setSecretId}
+            items={deployKeySecrets.map((secret) => [secret.id, `${secret.label} (ID: ${secret.id.slice(0, 8)})`])}
+            required
+          />
+        )}
       </Field>
     </ResourceForm>
   );
