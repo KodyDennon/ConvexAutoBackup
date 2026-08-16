@@ -655,6 +655,10 @@ function SecretForm({ client, actionLoading, perform }: { client: ApiClient; act
   );
 }
 
+function cleanDeploymentName(raw: string): string {
+  return raw.trim().replace(/[^a-zA-Z0-9_.:-]/g, "");
+}
+
 function TargetForm({ client, state, actionLoading, perform }: { client: ApiClient; state: ServiceState; actionLoading: string | null; perform: Perform }) {
   const [projectId, setProjectId] = useState("");
   const [name, setName] = useState("");
@@ -675,12 +679,13 @@ function TargetForm({ client, state, actionLoading, perform }: { client: ApiClie
       submitLabel="Create target"
       onSubmit={() =>
         perform("target", async () => {
+          const sanitized = cleanDeploymentName(deployment);
           await client.request("/api/v1/targets/cloud", {
             method: "POST",
             body: JSON.stringify({
               project_id: projectId,
               name,
-              deployment,
+              deployment: sanitized,
               url: url.trim() || undefined,
               deploy_key_secret_id: secretId || null
             })
@@ -699,12 +704,21 @@ function TargetForm({ client, state, actionLoading, perform }: { client: ApiClie
         <input value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Production Cloud" required />
       </Field>
       <Field label="Convex deployment name">
-        <input value={deployment} onChange={(event) => setDeployment(event.target.value)} placeholder="e.g. happy-animal-123" required />
+        <input
+          value={deployment}
+          onChange={(event) => setDeployment(cleanDeploymentName(event.target.value))}
+          placeholder="e.g. happy-animal-123"
+          required
+        />
       </Field>
       <Field label="Convex Cloud / Data API URL (Optional)">
-        <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder={deployment ? `https://${deployment}.convex.cloud` : "https://<deployment>.convex.cloud"} />
+        <input
+          value={url}
+          onChange={(event) => setUrl(event.target.value)}
+          placeholder={deployment ? `https://${deployment}.convex.cloud` : "https://deployment-name.convex.cloud"}
+        />
         <span className="subtle" style={{ fontSize: "0.78rem", marginTop: "0.25rem", display: "block" }}>
-          Cloud Data URL: <code>https://{deployment || "<deployment>"}.convex.cloud</code> | Actions Site URL: <code>https://{deployment || "<deployment>"}.convex.site</code>
+          Cloud Data URL: <code>https://{deployment || "deployment-name"}.convex.cloud</code> | Actions Site URL: <code>https://{deployment || "deployment-name"}.convex.site</code>
         </span>
       </Field>
       <Field label="Deploy key secret">

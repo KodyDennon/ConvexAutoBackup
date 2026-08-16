@@ -56,7 +56,8 @@ impl AppDatabase {
 
     pub fn create_cloud_target(&self, input: CreateCloudTarget) -> Result<ConvexTarget> {
         require_non_empty("target name", &input.name)?;
-        require_non_empty("deployment", &input.deployment)?;
+        let sanitized_deployment = input.deployment.trim().replace(|c: char| !c.is_ascii_alphanumeric() && c != '-' && c != '_' && c != ':', "");
+        require_non_empty("deployment", &sanitized_deployment)?;
         if input.deploy_key_env.is_none() && input.deploy_key_secret_id.is_none() {
             return Err(error!("deploy_key_env or deploy_key_secret_id is required"));
         }
@@ -86,7 +87,7 @@ impl AppDatabase {
             project_id: input.project_id,
             name: input.name,
             kind: ConvexTargetKind::Cloud,
-            deployment: input.deployment,
+            deployment: sanitized_deployment,
             url: input.url,
             secret,
         };
@@ -396,19 +397,20 @@ impl AppDatabase {
 
     pub fn update_target(&self, id: Uuid, name: &str, deployment: &str, url: Option<&str>, secret_id: Option<Uuid>) -> Result<ConvexTarget> {
         require_non_empty("target name", name)?;
-        require_non_empty("deployment", deployment)?;
+        let sanitized_deployment = deployment.trim().replace(|c: char| !c.is_ascii_alphanumeric() && c != '-' && c != '_' && c != ':', "");
+        require_non_empty("deployment", &sanitized_deployment)?;
         let connection = self.connection()?;
 
         if let Some(secret_id) = secret_id {
             self.require_secret(secret_id)?;
             connection.execute(
                 "UPDATE targets SET name = ?1, deployment = ?2, url = ?3, secret_id = ?4 WHERE id = ?5",
-                params![name, deployment, url, secret_id.to_string(), id.to_string()],
+                params![name, sanitized_deployment, url, secret_id.to_string(), id.to_string()],
             )?;
         } else {
             connection.execute(
                 "UPDATE targets SET name = ?1, deployment = ?2, url = ?3 WHERE id = ?4",
-                params![name, deployment, url, id.to_string()],
+                params![name, sanitized_deployment, url, id.to_string()],
             )?;
         }
 
