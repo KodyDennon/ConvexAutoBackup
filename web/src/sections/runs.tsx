@@ -21,16 +21,16 @@ export function RunsSection({
   const [confirmDeployment, setConfirmDeployment] = useState("");
 
   useEffect(() => {
-    if (!restoreRunId && state.runs[0]) setRestoreRunId(state.runs[0].run.id);
-    if (!restoreTargetId && state.targets[0]) setRestoreTargetId(state.targets[0].id);
+    if (!restoreRunId && state.runs?.[0]?.run) setRestoreRunId(state.runs[0].run.id);
+    if (!restoreTargetId && state.targets?.[0]) setRestoreTargetId(state.targets[0].id);
   }, [restoreRunId, restoreTargetId, state.runs, state.targets]);
 
-  const restoreTarget = state.targets.find((target) => target.id === restoreTargetId);
+  const restoreTarget = (state.targets ?? []).find((target) => target.id === restoreTargetId);
 
   return (
     <div className="page-stack">
       <section className="panel">
-        <PanelHeader icon={<Play size={18} />} title="Backup jobs" detail={`${state.jobs.length} configured jobs`} />
+        <PanelHeader icon={<Play size={18} />} title="Backup jobs" detail={`${(state.jobs ?? []).length} configured jobs`} />
         <div className="table">
           <div className="table-row table-head">
             <span>Name</span>
@@ -39,11 +39,11 @@ export function RunsSection({
             <span>Files</span>
             <span>Action</span>
           </div>
-          {state.jobs.map((job) => (
+          {(state.jobs ?? []).map((job) => (
             <div className="table-row" key={job.id}>
               <span>{job.name}</span>
-              <span>{state.targets.find((target) => target.id === job.target_id)?.deployment ?? job.target_id}</span>
-              <span>{state.destinations.find((destination) => destination.id === job.destination_id)?.name ?? job.destination_id}</span>
+              <span>{(state.targets ?? []).find((target) => target.id === job.target_id)?.deployment ?? job.target_id}</span>
+              <span>{(state.destinations ?? []).find((destination) => destination.id === job.destination_id)?.name ?? job.destination_id}</span>
               <span>{job.include_file_storage ? "Included" : "Database only"}</span>
               <button
                 className="small-button"
@@ -60,23 +60,23 @@ export function RunsSection({
               </button>
             </div>
           ))}
-          {state.jobs.length === 0 && <EmptyRow message="Create a backup job before running backups." />}
+          {(state.jobs ?? []).length === 0 && <EmptyRow message="Create a backup job before running backups." />}
         </div>
       </section>
 
       <section className="split">
         <div className="panel">
-          <PanelHeader icon={<Clock3 size={18} />} title="Runs" detail={`${state.runs.length} recorded`} />
-          <RunList runs={state.runs} jobs={state.jobs} />
+          <PanelHeader icon={<Clock3 size={18} />} title="Runs" detail={`${(state.runs ?? []).length} recorded`} />
+          <RunList runs={state.runs ?? []} jobs={state.jobs ?? []} />
         </div>
         <div className="panel">
           <PanelHeader icon={<RotateCcw size={18} />} title="Restore and verification" detail="Verification is required before a restore proceeds." />
           <div className="stack compact">
             <Field label="Run">
-              <Select value={restoreRunId} onChange={setRestoreRunId} items={state.runs.map((record) => [record.run.id, `${record.run.status} · ${formatDateTime(record.run.started_at)}`])} required />
+              <Select value={restoreRunId} onChange={setRestoreRunId} items={(state.runs ?? []).map((record) => [record.run.id, `${record.run.status} · ${formatDateTime(record.run.started_at)}`])} required />
             </Field>
             <Field label="Target">
-              <Select value={restoreTargetId} onChange={setRestoreTargetId} items={state.targets.map((target) => [target.id, `${target.name} · ${target.deployment}`])} required />
+              <Select value={restoreTargetId} onChange={setRestoreTargetId} items={(state.targets ?? []).map((target) => [target.id, `${target.name} · ${target.deployment}`])} required />
             </Field>
             <button
               className="secondary-button"

@@ -1,4 +1,4 @@
-import React, { FormEvent } from "react";
+import React, { FormEvent, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -217,24 +217,62 @@ export function EmptyRow({ message }: { message: string }) {
 }
 
 export function RunList({ runs, jobs, compact = false }: { runs: RunRecord[]; jobs: BackupJob[]; compact?: boolean }) {
+  const [activeManifestRecord, setActiveManifestRecord] = useState<RunRecord | null>(null);
+
   return (
-    <div className="table">
-      <div className="table-row table-head">
-        <span>Status</span>
-        <span>Job</span>
-        <span>Started</span>
-        {!compact && <span>Manifest/error</span>}
-      </div>
-      {runs.map((record) => (
-        <div className="table-row" key={record.run.id}>
-          <span className={`status-pill ${record.run.status}`}>{sentenceCase(record.run.status)}</span>
-          <span>{jobs.find((job) => job.id === record.run.job_id)?.name ?? record.run.job_id}</span>
-          <span>{formatDateTime(record.run.started_at)}</span>
-          {!compact && <span>{record.run.manifest_path ?? record.run.error ?? "Running"}</span>}
+    <>
+      <div className="table">
+        <div className="table-row table-head">
+          <span>Status</span>
+          <span>Job</span>
+          <span>Started</span>
+          {!compact && <span>Manifest Details</span>}
         </div>
-      ))}
-      {runs.length === 0 && <EmptyRow message="No backup runs have been recorded." />}
-    </div>
+        {runs.map((record) => (
+          <div className="table-row" key={record.run.id}>
+            <span className={`status-pill ${record.run.status}`}>{sentenceCase(record.run.status)}</span>
+            <span>{jobs.find((job) => job.id === record.run.job_id)?.name ?? record.run.job_id.slice(0, 8)}</span>
+            <span>{formatDateTime(record.run.started_at)}</span>
+            {!compact && (
+              <span>
+                {record.manifest_json ? (
+                  <button
+                    type="button"
+                    className="secondary-button small"
+                    onClick={() => setActiveManifestRecord(record)}
+                  >
+                    View Manifest
+                  </button>
+                ) : (
+                  <span className="subtle">{record.run.error ? `Error: ${record.run.error}` : record.run.manifest_path ?? "Pending"}</span>
+                )}
+              </span>
+            )}
+          </div>
+        ))}
+        {runs.length === 0 && <EmptyRow message="No backup runs have been recorded." />}
+      </div>
+
+      {activeManifestRecord && (
+        <div className="modal-backdrop" onClick={() => setActiveManifestRecord(null)}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Backup Manifest — Run #{activeManifestRecord.run.id.slice(0, 8)}</h3>
+              <button type="button" className="close-btn" onClick={() => setActiveManifestRecord(null)}>✕</button>
+            </div>
+            <div className="modal-body stack">
+              <p><strong>Status:</strong> <span className={`status-pill ${activeManifestRecord.run.status}`}>{sentenceCase(activeManifestRecord.run.status)}</span></p>
+              <p><strong>Manifest Path:</strong> <code>{activeManifestRecord.run.manifest_path ?? "N/A"}</code></p>
+              <h4>Raw Manifest JSON:</h4>
+              <pre className="json-pre">{activeManifestRecord.manifest_json}</pre>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="secondary-button" onClick={() => setActiveManifestRecord(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

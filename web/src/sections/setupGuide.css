@@ -2,11 +2,11 @@
   background: #ffffff;
   border: 1px solid #dce4dd;
   border-left: 5px solid #2f5f8f;
-  border-radius: 8px;
-  box-shadow: 0 1px 2px rgba(16, 33, 29, 0.05);
+  border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(16, 33, 29, 0.05);
   display: grid;
   gap: 1rem;
-  padding: 1rem;
+  padding: 1.25rem;
 }
 
 .setup-guide-header,
@@ -18,25 +18,25 @@
 }
 
 .setup-guide-header h2 {
-  font-size: 1.25rem;
+  font-size: 1.35rem;
   margin-bottom: 0.2rem;
 }
 
 .setup-progress {
   align-items: center;
   background: #edf2ef;
-  border-radius: 8px;
+  border-radius: 10px;
   color: #18332c;
   display: grid;
   flex: 0 0 auto;
   min-height: 64px;
-  min-width: 84px;
+  min-width: 90px;
   place-items: center;
   padding: 0.65rem;
 }
 
 .setup-progress strong {
-  font-size: 1.35rem;
+  font-size: 1.4rem;
   line-height: 1;
 }
 
@@ -48,17 +48,29 @@
 
 .setup-rail {
   display: grid;
-  gap: 0.75rem;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.6rem;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.setup-step-btn {
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.setup-step-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
 }
 
 .setup-step {
   border: 1px solid #dce4dd;
-  border-radius: 8px;
+  border-radius: 10px;
   display: grid;
   gap: 0.35rem;
-  min-height: 118px;
-  padding: 0.85rem;
+  min-height: 96px;
+  padding: 0.75rem;
 }
 
 .setup-step svg {
@@ -66,9 +78,9 @@
 }
 
 .setup-step.active {
-  background: #f4f7fb;
-  border-color: #9fb8d4;
-  box-shadow: inset 0 0 0 1px #9fb8d4;
+  background: #eef4fc;
+  border-color: #2f5f8f;
+  box-shadow: 0 0 0 2px rgba(47, 95, 143, 0.25);
 }
 
 .setup-step.active svg {
@@ -84,11 +96,143 @@
   color: #226b52;
 }
 
+.setup-tabs-nav {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.setup-tab-btn {
+  background: #e8eee9;
+  border: 1px solid #d0dad3;
+  color: #2a3d36;
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 0.55rem 0.9rem;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.setup-tab-btn:hover {
+  background: #dce5dd;
+}
+
+.setup-tab-btn.active {
+  background: #226b52;
+  color: #ffffff;
+  border-color: #226b52;
+  box-shadow: 0 2px 5px rgba(34, 107, 82, 0.25);
+}
+
+.info-banner {
+  background: #f0f7ff;
+  border: 1px solid #cce3ff;
+  border-left: 4px solid #0066cc;
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  color: #1a365d;
+}
+
+.info-banner strong {
+  display: block;
+  font-size: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.info-banner p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.grid.split-even {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+
+@media (max-width: 860px) {
+  .grid.split-even {
+    grid-template-columns: 1fr;
+  }
+  .setup-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.card-list {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 0.75rem;
+}
+
+.resource-card {
+  background: #f9fbf9;
+  border: 1px solid #e1e8e3;
+  border-radius: 10px;
+  padding: 0.9rem 1.1rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.resource-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.badge {
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  text-transform: uppercase;
+}
+
+.badge.success {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.tiny-code {
+  font-size: 0.78rem;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 0.25rem 0.45rem;
+  border-radius: 4px;
+}
+
+.button-primary-action {
+  background: #226b52;
+  color: white;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  border: none;
+  margin-top: 0.4rem;
+
+}
+
+.button-primary-action:hover {
+  background: #1a5541;
+}
+
 .setup-workspace {
   align-items: start;
   display: grid;
   gap: 1rem;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr) 300px;
 }
 
 .setup-primary {
@@ -98,114 +242,4 @@
 .task-frame {
   display: grid;
   gap: 0.9rem;
-}
-
-.task-frame-copy {
-  background: #f7f8f5;
-  border: 1px solid #dce4dd;
-  border-radius: 8px;
-  padding: 1rem;
-}
-
-.task-frame-copy h2,
-.setup-run-card h2,
-.setup-summary h2 {
-  font-size: 1.25rem;
-  margin-bottom: 0.25rem;
-}
-
-.task-frame .resource-form {
-  border-color: #bfd0de;
-  box-shadow: 0 8px 24px rgba(24, 51, 44, 0.08);
-}
-
-.setup-summary {
-  position: sticky;
-  top: 1rem;
-}
-
-.inventory-list {
-  display: grid;
-  gap: 0.45rem;
-}
-
-.inventory-row {
-  align-items: center;
-  border-bottom: 1px solid #edf1ee;
-  display: flex;
-  justify-content: space-between;
-  min-height: 34px;
-}
-
-.inventory-row span {
-  color: #65736e;
-  font-size: 0.86rem;
-  font-weight: 700;
-}
-
-.inventory-row strong {
-  color: #18332c;
-  font-size: 1rem;
-}
-
-.setup-run-card {
-  align-items: center;
-  display: flex;
-  gap: 1rem;
-  justify-content: space-between;
-}
-
-.setup-run-card.complete {
-  justify-content: flex-start;
-}
-
-.setup-run-card.complete svg {
-  color: #226b52;
-  flex: 0 0 auto;
-}
-
-.manual-config {
-  background: #ffffff;
-  border: 1px solid #dce4dd;
-  border-radius: 8px;
-  padding: 0.85rem 1rem 1rem;
-}
-
-.manual-config summary {
-  color: #18332c;
-  cursor: pointer;
-  font-weight: 800;
-}
-
-.manual-config .form-grid {
-  margin-top: 1rem;
-}
-
-@media (max-width: 1240px) {
-  .setup-rail {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 900px) {
-  .setup-guide-header,
-  .setup-guide-actions,
-  .setup-run-card {
-    align-items: stretch;
-    display: grid;
-  }
-
-  .setup-workspace {
-    grid-template-columns: 1fr;
-  }
-
-  .setup-summary {
-    position: static;
-  }
-}
-
-@media (max-width: 680px) {
-  .setup-rail {
-    grid-template-columns: 1fr;
-  }
 }

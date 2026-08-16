@@ -26,7 +26,7 @@ export function ScheduleForm({
   const [missedRunPolicy, setMissedRunPolicy] = useState<"run_once_on_resume" | "skip">("run_once_on_resume");
 
   useEffect(() => {
-    if (!jobId && state.jobs[0]) setJobId(state.jobs[0].id);
+    if (!jobId && state.jobs?.[0]) setJobId(state.jobs[0].id);
   }, [jobId, state.jobs]);
 
   return (

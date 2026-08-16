@@ -306,6 +306,115 @@ impl AppDatabase {
         )?;
         Ok(())
     }
+
+    pub fn delete_project(&self, id: Uuid) -> Result<()> {
+        let connection = self.connection()?;
+        connection.execute("DELETE FROM schedules WHERE job_id IN (SELECT id FROM jobs WHERE project_id = ?1)", params![id.to_string()])?;
+        connection.execute("DELETE FROM jobs WHERE project_id = ?1", params![id.to_string()])?;
+        connection.execute("DELETE FROM targets WHERE project_id = ?1", params![id.to_string()])?;
+        let count = connection.execute("DELETE FROM projects WHERE id = ?1", params![id.to_string()])?;
+        if count == 0 {
+            return Err(error!("project {id} does not exist"));
+        }
+        self.record_audit("system", "project.delete", "project", Some(id), "deleted project and associated targets/jobs")?;
+        Ok(())
+    }
+
+    pub fn delete_target(&self, id: Uuid) -> Result<()> {
+        let connection = self.connection()?;
+        connection.execute("DELETE FROM schedules WHERE job_id IN (SELECT id FROM jobs WHERE target_id = ?1)", params![id.to_string()])?;
+        connection.execute("DELETE FROM jobs WHERE target_id = ?1", params![id.to_string()])?;
+        let count = connection.execute("DELETE FROM targets WHERE id = ?1", params![id.to_string()])?;
+        if count == 0 {
+            return Err(error!("target {id} does not exist"));
+        }
+        self.record_audit("system", "target.delete", "target", Some(id), "deleted target and associated jobs")?;
+        Ok(())
+    }
+
+    pub fn delete_destination(&self, id: Uuid) -> Result<()> {
+        let connection = self.connection()?;
+        connection.execute("DELETE FROM schedules WHERE job_id IN (SELECT id FROM jobs WHERE destination_id = ?1)", params![id.to_string()])?;
+        connection.execute("DELETE FROM jobs WHERE destination_id = ?1", params![id.to_string()])?;
+        let count = connection.execute("DELETE FROM destinations WHERE id = ?1", params![id.to_string()])?;
+        if count == 0 {
+            return Err(error!("destination {id} does not exist"));
+        }
+        self.record_audit("system", "destination.delete", "destination", Some(id), "deleted destination and associated jobs")?;
+        Ok(())
+    }
+
+    pub fn delete_job(&self, id: Uuid) -> Result<()> {
+        let connection = self.connection()?;
+        connection.execute("DELETE FROM schedules WHERE job_id = ?1", params![id.to_string()])?;
+        let count = connection.execute("DELETE FROM jobs WHERE id = ?1", params![id.to_string()])?;
+        if count == 0 {
+            return Err(error!("job {id} does not exist"));
+        }
+        self.record_audit("system", "job.delete", "job", Some(id), "deleted backup job")?;
+        Ok(())
+    }
+
+    pub fn delete_schedule(&self, id: Uuid) -> Result<()> {
+        let connection = self.connection()?;
+        let count = connection.execute("DELETE FROM schedules WHERE id = ?1", params![id.to_string()])?;
+        if count == 0 {
+            return Err(error!("schedule {id} does not exist"));
+        }
+        self.record_audit("system", "schedule.delete", "schedule", Some(id), "deleted schedule")?;
+        Ok(())
+    }
+
+    pub fn delete_secret(&self, id: Uuid) -> Result<()> {
+        let connection = self.connection()?;
+        let count = connection.execute("DELETE FROM secrets WHERE id = ?1", params![id.to_string()])?;
+        if count == 0 {
+            return Err(error!("secret {id} does not exist"));
+        }
+        self.record_audit("system", "secret.delete", "secret", Some(id), "deleted secret")?;
+        Ok(())
+    }
+
+    pub fn update_project(&self, id: Uuid, name: &str, description: Option<&str>) -> Result<Project> {
+        require_non_empty("project name", name)?;
+        let connection = self.connection()?;
+        let count = connection.execute(
+            "UPDATE projects SET name = ?1, description = ?2 WHERE id = ?3",
+            params![name, description, id.to_string()],
+        )?;
+        if count == 0 {
+            return Err(error!("project {id} does not exist"));
+        }
+        self.record_audit("system", "project.update", "project", Some(id), &format!("updated project {name}"))?;
+        let project = connection.query_row(
+            "SELECT id, team_id, name, description, created_at FROM projects WHERE id = ?1",
+            params![id.to_string()],
+            project_from_row,
+        )?;
+        Ok(project)
+    }
+
+    pub fn update_target(&self, id: Uuid, name: &str, deployment: &str, secret_id: Option<Uuid>) -> Result<ConvexTarget> {
+        require_non_empty("target name", name)?;
+        require_non_empty("deployment", deployment)?;
+        let connection = self.connection()?;
+
+        if let Some(secret_id) = secret_id {
+            self.require_secret(secret_id)?;
+            connection.execute(
+                "UPDATE targets SET name = ?1, deployment = ?2, secret_id = ?3 WHERE id = ?4",
+                params![name, deployment, secret_id.to_string(), id.to_string()],
+            )?;
+        } else {
+            connection.execute(
+                "UPDATE targets SET name = ?1, deployment = ?2 WHERE id = ?3",
+                params![name, deployment, id.to_string()],
+            )?;
+        }
+
+        self.record_audit("system", "target.update", "target", Some(id), &format!("updated target {name}"))?;
+        self.get_target(id)
+    }
 }
 
 #[allow(dead_code)]

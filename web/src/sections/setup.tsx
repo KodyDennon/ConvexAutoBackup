@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
-import { Activity, CheckCircle2, DatabaseBackup, HardDrive, KeyRound, Play, Plus } from "lucide-react";
+import { Activity, CheckCircle2, DatabaseBackup, HardDrive, KeyRound, Layers, Play, Plus, ShieldCheck, Clock3, Trash2 } from "lucide-react";
 import {
   ApiClient,
   destinationLabel,
+  formatDateTime,
   sentenceCase,
   type SecretKind,
   type ServiceState
 } from "../appState";
 import { secretKinds } from "../constants";
-import { Field, ResourceForm, ResourceList, Select } from "../components/common";
+import { Field, ResourceForm, Select } from "../components/common";
 import { ScheduleForm } from "./setupScheduleForm";
 import "./setupGuide.css";
 
@@ -27,15 +28,70 @@ export function SetupSection({
   perform: Perform;
 }) {
   const activeTask = currentSetupTask(state);
+  const [selectedTab, setSelectedTab] = useState<SetupTask>(activeTask);
+
+  useEffect(() => {
+    setSelectedTab(activeTask);
+  }, [activeTask]);
 
   return (
     <div className="page-stack">
-      <SetupGuide state={state} activeTask={activeTask} />
+      <SetupGuide
+        state={state}
+        activeTask={activeTask}
+        selectedTab={selectedTab}
+        onSelectTab={setSelectedTab}
+      />
+
+      <nav className="setup-tabs-nav" aria-label="Setup steps navigation">
+        <button
+          type="button"
+          className={`setup-tab-btn ${selectedTab === "project" ? "active" : ""}`}
+          onClick={() => setSelectedTab("project")}
+        >
+          <Layers size={16} /> 1. Projects ({(state.projects ?? []).length})
+        </button>
+        <button
+          type="button"
+          className={`setup-tab-btn ${selectedTab === "secret" ? "active" : ""}`}
+          onClick={() => setSelectedTab("secret")}
+        >
+          <KeyRound size={16} /> 2. Deploy Keys ({(state.secrets ?? []).filter(s => s.kind === "convex_deploy_key").length})
+        </button>
+        <button
+          type="button"
+          className={`setup-tab-btn ${selectedTab === "target" ? "active" : ""}`}
+          onClick={() => setSelectedTab("target")}
+        >
+          <DatabaseBackup size={16} /> 3. Targets ({(state.targets ?? []).length})
+        </button>
+        <button
+          type="button"
+          className={`setup-tab-btn ${selectedTab === "destination" ? "active" : ""}`}
+          onClick={() => setSelectedTab("destination")}
+        >
+          <HardDrive size={16} /> 4. Storage Vaults ({(state.destinations ?? []).length})
+        </button>
+        <button
+          type="button"
+          className={`setup-tab-btn ${selectedTab === "job" ? "active" : ""}`}
+          onClick={() => setSelectedTab("job")}
+        >
+          <Activity size={16} /> 5. Backup Jobs ({(state.jobs ?? []).length})
+        </button>
+        <button
+          type="button"
+          className={`setup-tab-btn ${selectedTab === "schedule" ? "active" : ""}`}
+          onClick={() => setSelectedTab("schedule")}
+        >
+          <Clock3 size={16} /> 6. Schedules ({(state.schedules ?? []).length})
+        </button>
+      </nav>
 
       <section className="setup-workspace">
         <div className="setup-primary">
-          <CurrentSetupTask
-            task={activeTask}
+          <TabWorkspace
+            tab={selectedTab}
             client={client}
             state={state}
             actionLoading={actionLoading}
@@ -46,137 +102,385 @@ export function SetupSection({
           <PanelSummary state={state} />
         </aside>
       </section>
-
-      <details className="manual-config">
-        <summary>Manual configuration</summary>
-        <section className="form-grid">
-          <ProjectForm client={client} actionLoading={actionLoading} perform={perform} />
-          <SecretForm client={client} actionLoading={actionLoading} perform={perform} />
-          <TargetForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
-          <DestinationForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
-          <JobForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
-          <ScheduleForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
-        </section>
-      </details>
-
-      <section className="split three">
-        <ResourceList title="Projects" items={state.projects.map((project) => [project.name, project.description ?? project.id])} />
-        <ResourceList title="Targets" items={state.targets.map((target) => [target.name, target.deployment])} />
-        <ResourceList title="Destinations" items={state.destinations.map((destination) => [destination.name, destinationLabel(destination)])} />
-      </section>
     </div>
   );
 }
 
 function currentSetupTask(state: ServiceState): SetupTask {
-  const latestRun = state.runs[0]?.run;
-  if (state.projects.length === 0) return "project";
-  if (state.targets.length === 0 && !state.secrets.some((secret) => secret.kind === "convex_deploy_key")) return "secret";
-  if (state.targets.length === 0) return "target";
-  if (state.destinations.length === 0) return "destination";
-  if (state.jobs.length === 0) return "job";
-  if (state.schedules.length === 0) return "schedule";
+  const latestRun = state.runs?.[0]?.run;
+  const projects = state.projects ?? [];
+  const targets = state.targets ?? [];
+  const secrets = state.secrets ?? [];
+  const destinations = state.destinations ?? [];
+  const jobs = state.jobs ?? [];
+  const schedules = state.schedules ?? [];
+
+  if (projects.length === 0) return "project";
+  if (targets.length === 0 && !secrets.some((secret) => secret.kind === "convex_deploy_key")) return "secret";
+  if (targets.length === 0) return "target";
+  if (destinations.length === 0) return "destination";
+  if (jobs.length === 0) return "job";
+  if (schedules.length === 0) return "schedule";
   if (latestRun?.status !== "succeeded") return "backup";
   return "complete";
 }
 
-function CurrentSetupTask({
-  task,
+function TabWorkspace({
+  tab,
   client,
   state,
   actionLoading,
   perform
 }: {
-  task: SetupTask;
+  tab: SetupTask;
   client: ApiClient;
   state: ServiceState;
   actionLoading: string | null;
   perform: Perform;
 }) {
-  if (task === "project") {
+  const projects = state.projects ?? [];
+  const secrets = state.secrets ?? [];
+  const targets = state.targets ?? [];
+  const destinations = state.destinations ?? [];
+  const jobs = state.jobs ?? [];
+  const schedules = state.schedules ?? [];
+
+  if (tab === "project") {
     return (
-      <TaskFrame title="Start with a project" detail="Name the Convex app or customer deployment you want protected.">
-        <ProjectForm client={client} actionLoading={actionLoading} perform={perform} />
-      </TaskFrame>
-    );
-  }
-  if (task === "secret") {
-    return (
-      <TaskFrame title="Store the Convex deploy key" detail="Use a deploy key with permission to export the target deployment. It is encrypted before being stored.">
-        <SecretForm client={client} actionLoading={actionLoading} perform={perform} />
-      </TaskFrame>
-    );
-  }
-  if (task === "target") {
-    return (
-      <TaskFrame title="Connect the Convex deployment" detail="Point the project at the Convex deployment name that should be exported.">
-        <TargetForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
-      </TaskFrame>
-    );
-  }
-  if (task === "destination") {
-    return (
-      <TaskFrame title="Choose where backups land" detail="Start with a local vault, then add S3-compatible offsite storage when you are ready.">
-        <DestinationForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
-      </TaskFrame>
-    );
-  }
-  if (task === "job") {
-    return (
-      <TaskFrame title="Create the backup job" detail="Bind the target and destination together into a runnable full backup.">
-        <JobForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
-      </TaskFrame>
-    );
-  }
-  if (task === "schedule") {
-    return (
-      <TaskFrame title="Automate the cadence" detail="Choose how often the service should check and run this backup job.">
-        <ScheduleForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
-      </TaskFrame>
-    );
-  }
-  if (task === "backup") {
-    const firstJob = state.jobs[0];
-    return (
-      <section className="panel setup-run-card">
-        <div>
-          <p className="eyebrow">Final setup step</p>
-          <h2>Run and verify the first backup</h2>
-          <p className="subtle">This proves the deploy key, Convex export runner, destination path, and manifest writing all work together.</p>
+      <div className="tab-container stack">
+        <div className="info-banner">
+          <strong>Step 1: Create a Project</strong>
+          <p>A Project is a name for your Convex application or customer environment (e.g. <code>Production App</code> or <code>Client Studio</code>).</p>
         </div>
-        <button
-          type="button"
-          disabled={!firstJob || actionLoading === "first-backup"}
-          onClick={() =>
-            perform("first-backup", async () => {
-              if (!firstJob) return "Create a backup job before running the first backup.";
-              await client.request(`/api/v1/jobs/${firstJob.id}/run`, { method: "POST" });
-              return "First backup run started. Check Runs for the result, then verify the archive.";
-            })
-          }
-        >
-          <Play size={16} /> Run first backup
-        </button>
-      </section>
+        <div className="grid split-even">
+          <ProjectForm client={client} actionLoading={actionLoading} perform={perform} />
+          <div className="panel">
+            <h3>Configured Projects ({projects.length})</h3>
+            {projects.length === 0 ? (
+              <p className="subtle">No projects created yet. Use the form to add your first project.</p>
+            ) : (
+              <div className="card-list">
+                {projects.map((p) => (
+                  <div key={p.id} className="resource-card">
+                    <div className="resource-card-header">
+                      <strong>{p.name}</strong>
+                      <span className="badge">Active</span>
+                    </div>
+                    {p.description && <p className="subtle">{p.description}</p>}
+                    <code className="tiny-code">ID: {p.id}</code>
+                    <div className="card-actions">
+                      <button
+                        className="danger-button small"
+                        type="button"
+                        disabled={actionLoading === `delete-project-${p.id}`}
+                        onClick={() =>
+                          void perform(`delete-project-${p.id}`, async () => {
+                            if (!confirm(`Delete project "${p.name}"? Associated targets and jobs will also be deleted.`)) return;
+                            await client.request(`/api/v1/projects/${p.id}`, { method: "DELETE" });
+                            return `Project "${p.name}" deleted.`;
+                          })
+                        }
+                      >
+                        <Trash2 size={14} /> Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     );
   }
-  return (
-    <section className="panel setup-run-card complete">
-      <CheckCircle2 size={24} />
-      <div>
-        <p className="eyebrow">Protected</p>
-        <h2>Backups are configured</h2>
-        <p className="subtle">Use Runs for manual execution and restore verification, or DR Center for schedule and readiness checks.</p>
+
+  if (tab === "secret") {
+    const deployKeys = secrets.filter((s) => s.kind === "convex_deploy_key");
+    return (
+      <div className="tab-container stack">
+        <div className="info-banner">
+          <strong>Step 2: Add Convex Deploy Key</strong>
+          <p>
+            Copy a Deploy Key from your Convex Dashboard (<code>Deployment Settings</code> → <code>Deploy Keys</code>) or run <code>npx convex deploy-key</code> in your terminal.
+            Keys are encrypted using your master key before saving.
+          </p>
+        </div>
+        <div className="grid split-even">
+          <SecretForm client={client} actionLoading={actionLoading} perform={perform} />
+          <div className="panel">
+            <h3>Stored Deploy Keys ({deployKeys.length})</h3>
+            {deployKeys.length === 0 ? (
+              <p className="subtle">No deploy keys stored yet. Paste your <code>prod:...</code> key on the left.</p>
+            ) : (
+              <div className="card-list">
+                {deployKeys.map((s) => (
+                  <div key={s.id} className="resource-card">
+                    <div className="resource-card-header">
+                      <strong>{s.label}</strong>
+                      <span className="badge success">Encrypted</span>
+                    </div>
+                    <p className="subtle">Kind: <code>{s.kind}</code></p>
+                    <code className="tiny-code">Updated: {formatDateTime(s.updated_at)}</code>
+                    <div className="card-actions">
+                      <button
+                        className="danger-button small"
+                        type="button"
+                        disabled={actionLoading === `delete-secret-${s.id}`}
+                        onClick={() =>
+                          void perform(`delete-secret-${s.id}`, async () => {
+                            if (!confirm(`Delete secret "${s.label}"?`)) return;
+                            await client.request(`/api/v1/secrets/${s.id}`, { method: "DELETE" });
+                            return `Secret "${s.label}" deleted.`;
+                          })
+                        }
+                      >
+                        <Trash2 size={14} /> Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
-    </section>
-  );
+    );
+  }
+
+  if (tab === "target") {
+    return (
+      <div className="tab-container stack">
+        <div className="info-banner">
+          <strong>Step 3: Connect Convex Deployment Target</strong>
+          <p>Link your Project to your Convex Deployment Name (e.g. <code>happy-animal-123</code>) and select the corresponding Deploy Key.</p>
+        </div>
+        <div className="grid split-even">
+          <TargetForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
+          <div className="panel">
+            <h3>Connected Targets ({targets.length})</h3>
+            {targets.length === 0 ? (
+              <p className="subtle">No targets configured yet. Add a target to connect a deployment.</p>
+            ) : (
+              <div className="card-list">
+                {targets.map((t) => (
+                  <div key={t.id} className="resource-card">
+                    <div className="resource-card-header">
+                      <strong>{t.name}</strong>
+                      <span className="badge">Convex Cloud</span>
+                    </div>
+                    <p>Deployment: <code>{t.deployment}</code></p>
+                    <code className="tiny-code">Key Secret: {t.secret.label}</code>
+                    <div className="card-actions">
+                      <button
+                        className="secondary-button small"
+                        type="button"
+                        disabled={actionLoading === `test-target-${t.id}`}
+                        onClick={() =>
+                          void perform(`test-target-${t.id}`, async () => {
+                            const res = await client.request<{ message: string }>(`/api/v1/targets/${t.id}/test`, { method: "POST" });
+                            return res.message ?? "Target connection verified.";
+                          })
+                        }
+                      >
+                        <CheckCircle2 size={14} /> Test
+                      </button>
+                      <button
+                        className="danger-button small"
+                        type="button"
+                        disabled={actionLoading === `delete-target-${t.id}`}
+                        onClick={() =>
+                          void perform(`delete-target-${t.id}`, async () => {
+                            if (!confirm(`Delete target "${t.name}"? Associated jobs will also be deleted.`)) return;
+                            await client.request(`/api/v1/targets/${t.id}`, { method: "DELETE" });
+                            return `Target "${t.name}" deleted.`;
+                          })
+                        }
+                      >
+                        <Trash2 size={14} /> Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (tab === "destination") {
+    return (
+      <div className="tab-container stack">
+        <div className="info-banner">
+          <strong>Step 4: Configure Storage Vault</strong>
+          <p>Choose where backup zip archives will be stored: a local folder path (e.g. <code>/home/user/backups</code>) or an S3 bucket.</p>
+        </div>
+        <div className="grid split-even">
+          <DestinationForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
+          <div className="panel">
+            <h3>Storage Destinations ({destinations.length})</h3>
+            {destinations.length === 0 ? (
+              <p className="subtle">No storage vaults created yet.</p>
+            ) : (
+              <div className="card-list">
+                {destinations.map((d) => (
+                  <div key={d.id} className="resource-card">
+                    <div className="resource-card-header">
+                      <strong>{d.name}</strong>
+                      <span className="badge">{d.kind.type === "local_filesystem" ? "Local Folder" : "S3 Bucket"}</span>
+                    </div>
+                    <p className="subtle">{destinationLabel(d)}</p>
+                    <code className="tiny-code">Retention: Keep last {d.retention.keep_last} backups</code>
+                    <div className="card-actions">
+                      <button
+                        className="danger-button small"
+                        type="button"
+                        disabled={actionLoading === `delete-dest-${d.id}`}
+                        onClick={() =>
+                          void perform(`delete-dest-${d.id}`, async () => {
+                            if (!confirm(`Delete destination "${d.name}"? Associated jobs will also be deleted.`)) return;
+                            await client.request(`/api/v1/destinations/${d.id}`, { method: "DELETE" });
+                            return `Destination "${d.name}" deleted.`;
+                          })
+                        }
+                      >
+                        <Trash2 size={14} /> Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (tab === "job") {
+    return (
+      <div className="tab-container stack">
+        <div className="info-banner">
+          <strong>Step 5: Create Backup Job & Test Run</strong>
+          <p>A Backup Job links your Convex Target and Storage Vault together. Once created, click <strong>▶ Run Backup Now</strong> to test immediate export!</p>
+        </div>
+        <div className="grid split-even">
+          <JobForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
+          <div className="panel">
+            <h3>Configured Backup Jobs ({jobs.length})</h3>
+            {jobs.length === 0 ? (
+              <p className="subtle">No backup jobs created yet. Fill in the form on the left.</p>
+            ) : (
+              <div className="card-list">
+                {jobs.map((j) => {
+                  const target = targets.find((t) => t.id === j.target_id);
+                  const dest = destinations.find((d) => d.id === j.destination_id);
+                  return (
+                    <div key={j.id} className="resource-card job-card">
+                      <div className="resource-card-header">
+                        <strong>{j.name}</strong>
+                        <span className="badge success">Ready to Run</span>
+                      </div>
+                      <p>Target: <code>{target?.deployment ?? j.target_id}</code></p>
+                      <p>Vault: <code>{dest?.name ?? j.destination_id}</code></p>
+                      <div className="card-actions">
+                        <button
+                          className="button-primary-action"
+                          type="button"
+                          disabled={actionLoading === `run-${j.id}`}
+                          onClick={() =>
+                            void perform(`run-${j.id}`, async () => {
+                              await client.request(`/api/v1/jobs/${j.id}/run`, { method: "POST" });
+                              return `Backup run started for "${j.name}". Check Runs section for details.`;
+                            })
+                          }
+                        >
+                          <Play size={16} /> Run Backup Now
+                        </button>
+                        <button
+                          className="danger-button small"
+                          type="button"
+                          disabled={actionLoading === `delete-job-${j.id}`}
+                          onClick={() =>
+                            void perform(`delete-job-${j.id}`, async () => {
+                              if (!confirm(`Delete backup job "${j.name}"?`)) return;
+                              await client.request(`/api/v1/jobs/${j.id}`, { method: "DELETE" });
+                              return `Job "${j.name}" deleted.`;
+                            })
+                          }
+                        >
+                          <Trash2 size={14} /> Delete
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (tab === "schedule" || tab === "backup" || tab === "complete") {
+    return (
+      <div className="tab-container stack">
+        <div className="info-banner">
+          <strong>Step 6: Automated Backup Schedule</strong>
+          <p>Set an automated schedule for your backup jobs (e.g. Every 60 minutes, Daily at 02:00, or custom Cron expression).</p>
+        </div>
+        <div className="grid split-even">
+          <ScheduleForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
+          <div className="panel">
+            <h3>Active Schedules ({schedules.length})</h3>
+            {schedules.length === 0 ? (
+              <p className="subtle">No automated schedules set up yet.</p>
+            ) : (
+              <div className="card-list">
+                {schedules.map((s) => (
+                  <div key={s.id} className="resource-card">
+                    <div className="resource-card-header">
+                      <strong>Schedule {s.id.slice(0, 8)}</strong>
+                      <span className="badge success">Active</span>
+                    </div>
+                    <p>Mode: <code>{s.schedule.type}</code></p>
+                    <p className="subtle">Next Due: {formatDateTime(s.next_due_at)}</p>
+                    <div className="card-actions">
+                      <button
+                        className="danger-button small"
+                        type="button"
+                        disabled={actionLoading === `delete-schedule-${s.id}`}
+                        onClick={() =>
+                          void perform(`delete-schedule-${s.id}`, async () => {
+                            if (!confirm(`Delete schedule?`)) return;
+                            await client.request(`/api/v1/schedules/${s.id}`, { method: "DELETE" });
+                            return `Schedule deleted.`;
+                          })
+                        }
+                      >
+                        <Trash2 size={14} /> Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 function TaskFrame({ title, detail, children }: { title: string; detail: string; children: React.ReactNode }) {
   return (
     <div className="task-frame">
       <div className="task-frame-copy">
-        <p className="eyebrow">Current task</p>
+        <p className="eyebrow">Setup Wizard</p>
         <h2>{title}</h2>
         <p className="subtle">{detail}</p>
       </div>
@@ -186,20 +490,27 @@ function TaskFrame({ title, detail, children }: { title: string; detail: string;
 }
 
 function PanelSummary({ state }: { state: ServiceState }) {
+  const projects = state.projects ?? [];
+  const secrets = state.secrets ?? [];
+  const targets = state.targets ?? [];
+  const destinations = state.destinations ?? [];
+  const jobs = state.jobs ?? [];
+  const schedules = state.schedules ?? [];
+
   const rows = [
-    ["Projects", state.projects.length],
-    ["Deploy keys", state.secrets.filter((secret) => secret.kind === "convex_deploy_key").length],
-    ["Targets", state.targets.length],
-    ["Destinations", state.destinations.length],
-    ["Jobs", state.jobs.length],
-    ["Schedules", state.schedules.length]
+    ["Projects", projects.length],
+    ["Deploy keys", secrets.filter((secret) => secret.kind === "convex_deploy_key").length],
+    ["Targets", targets.length],
+    ["Destinations", destinations.length],
+    ["Jobs", jobs.length],
+    ["Schedules", schedules.length]
   ];
 
   return (
     <div className="stack compact">
       <div>
         <p className="eyebrow">Configured now</p>
-        <h2>Install inventory</h2>
+        <h2>Install Inventory</h2>
       </div>
       <div className="inventory-list">
         {rows.map(([label, value]) => (
@@ -209,25 +520,36 @@ function PanelSummary({ state }: { state: ServiceState }) {
           </div>
         ))}
       </div>
-      <p className="subtle">The setup flow only advances after the server confirms each saved resource.</p>
+      <p className="subtle">Every component is saved into your encrypted SQLite database.</p>
     </div>
   );
 }
 
 function SetupGuide({
   state,
-  activeTask
+  activeTask,
+  selectedTab,
+  onSelectTab
 }: {
   state: ServiceState;
   activeTask: SetupTask;
+  selectedTab: SetupTask;
+  onSelectTab: (task: SetupTask) => void;
 }) {
-  const latestRun = state.runs[0]?.run;
-  const steps = [
-    { id: "project", label: "Project", complete: state.projects.length > 0, detail: "Backup owner is named" },
-    { id: "target", label: "Convex target", complete: state.targets.length > 0, detail: "Deployment and deploy key are connected" },
-    { id: "destination", label: "Destination", complete: state.destinations.length > 0, detail: "Local or S3 vault is ready" },
-    { id: "schedule", label: "Schedule", complete: state.schedules.length > 0, detail: "Automatic cadence is set" },
-    { id: "backup", label: "First backup", complete: latestRun?.status === "succeeded", detail: latestRun ? `Latest run: ${latestRun.status}` : "Run and verify the first archive" }
+  const latestRun = state.runs?.[0]?.run;
+  const projects = state.projects ?? [];
+  const targets = state.targets ?? [];
+  const destinations = state.destinations ?? [];
+  const schedules = state.schedules ?? [];
+
+  const steps: { id: SetupTask; label: string; complete: boolean; detail: string }[] = [
+    { id: "project", label: "1. Project", complete: projects.length > 0, detail: "Name app" },
+    { id: "secret", label: "2. Deploy Key", complete: state.secrets?.some(s => s.kind === "convex_deploy_key") ?? false, detail: "Paste prod key" },
+    { id: "target", label: "3. Target", complete: targets.length > 0, detail: "Connect deployment" },
+    { id: "destination", label: "4. Destination", complete: destinations.length > 0, detail: "Set local/S3 path" },
+    { id: "job", label: "5. Backup Job", complete: (state.jobs ?? []).length > 0, detail: "Pair target + vault" },
+    { id: "schedule", label: "6. Schedule", complete: schedules.length > 0, detail: "Set cadence" },
+    { id: "backup", label: "7. Run Test", complete: latestRun?.status === "succeeded", detail: latestRun ? `Status: ${latestRun.status}` : "Run first export" }
   ];
   const completeCount = steps.filter((step) => step.complete).length;
 
@@ -235,22 +557,27 @@ function SetupGuide({
     <section className="setup-guide">
       <div className="setup-guide-header">
         <div>
-          <p className="eyebrow">First-run protection path</p>
-          <h2>Get this deployment backed up</h2>
-          <p className="subtle">Complete the current task below. Manual configuration stays available for advanced edits.</p>
+          <p className="eyebrow">Protection Pipeline</p>
+          <h2>Interactive Setup Navigator</h2>
+          <p className="subtle">Click any step below to jump directly to its configuration and manage resources.</p>
         </div>
         <div className="setup-progress" aria-label={`${completeCount} of ${steps.length} setup steps complete`}>
           <strong>{completeCount}/{steps.length}</strong>
-          <span>ready</span>
+          <span>steps ready</span>
         </div>
       </div>
       <div className="setup-rail">
         {steps.map((step) => (
-          <div className={`setup-step ${step.complete ? "complete" : ""} ${activeTask === step.id ? "active" : ""}`} key={step.label}>
+          <button
+            type="button"
+            key={step.id}
+            className={`setup-step-btn setup-step ${step.complete ? "complete" : ""} ${selectedTab === step.id ? "active" : ""}`}
+            onClick={() => onSelectTab(step.id)}
+          >
             <CheckCircle2 size={18} />
             <strong>{step.label}</strong>
             <span>{step.detail}</span>
-          </div>
+          </button>
         ))}
       </div>
     </section>
@@ -263,7 +590,7 @@ function ProjectForm({ client, actionLoading, perform }: { client: ApiClient; ac
 
   return (
     <ResourceForm
-      title="Project"
+      title="Create Project"
       icon={<Plus size={18} />}
       loading={actionLoading === "project"}
       submitLabel="Create project"
@@ -279,11 +606,11 @@ function ProjectForm({ client, actionLoading, perform }: { client: ApiClient; ac
         })
       }
     >
-      <Field label="Name">
-        <input value={name} onChange={(event) => setName(event.target.value)} required />
+      <Field label="Project name">
+        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Pilates Platform Prod" required />
       </Field>
-      <Field label="Description">
-        <input value={description} onChange={(event) => setDescription(event.target.value)} />
+      <Field label="Description (optional)">
+        <input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Main production database" />
       </Field>
     </ResourceForm>
   );
@@ -296,10 +623,10 @@ function SecretForm({ client, actionLoading, perform }: { client: ApiClient; act
 
   return (
     <ResourceForm
-      title="Encrypted secret"
+      title="Store Deploy Key / Secret"
       icon={<KeyRound size={18} />}
       loading={actionLoading === "secret"}
-      submitLabel="Store secret"
+      submitLabel="Save secret"
       onSubmit={() =>
         perform("secret", async () => {
           await client.request("/api/v1/secrets", {
@@ -308,58 +635,40 @@ function SecretForm({ client, actionLoading, perform }: { client: ApiClient; act
           });
           setLabel("");
           setValue("");
-          return "Secret encrypted and stored.";
+          return "Encrypted secret saved.";
         })
       }
     >
-      <Field label="Label">
-        <input value={label} onChange={(event) => setLabel(event.target.value)} required />
+      <Field label="Secret label">
+        <input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="e.g. prod-deploy-key" required />
       </Field>
       <Field label="Kind">
-        <select value={kind} onChange={(event) => setKind(event.target.value as SecretKind)}>
-          {secretKinds.map((option) => (
-            <option key={option} value={option}>
-              {sentenceCase(option)}
-            </option>
-          ))}
-        </select>
+        <Select value={kind} onChange={(val) => setKind(val as SecretKind)} items={secretKinds.map((k) => [k, sentenceCase(k)])} required />
       </Field>
-      <Field label="Secret value">
-        <input value={value} onChange={(event) => setValue(event.target.value)} type="password" required />
+      <Field label="Secret value (Deploy Key)">
+        <input value={value} onChange={(event) => setValue(event.target.value)} type="password" placeholder="prod:deployment-name|..." required />
       </Field>
     </ResourceForm>
   );
 }
 
-function TargetForm({
-  client,
-  state,
-  actionLoading,
-  perform
-}: {
-  client: ApiClient;
-  state: ServiceState;
-  actionLoading: string | null;
-  perform: Perform;
-}) {
+function TargetForm({ client, state, actionLoading, perform }: { client: ApiClient; state: ServiceState; actionLoading: string | null; perform: Perform }) {
   const [projectId, setProjectId] = useState("");
-  const [name, setName] = useState("Production");
+  const [name, setName] = useState("");
   const [deployment, setDeployment] = useState("");
-  const [secretMode, setSecretMode] = useState<"stored" | "env">("stored");
   const [secretId, setSecretId] = useState("");
-  const [deployKeyEnv, setDeployKeyEnv] = useState("CONVEX_DEPLOY_KEY");
 
   useEffect(() => {
-    if (!projectId && state.projects[0]) setProjectId(state.projects[0].id);
-    if (!secretId && state.secrets[0]) setSecretId(state.secrets[0].id);
+    if (!projectId && state.projects?.[0]) setProjectId(state.projects[0].id);
+    if (!secretId && state.secrets?.[0]) setSecretId(state.secrets[0].id);
   }, [projectId, secretId, state.projects, state.secrets]);
 
   return (
     <ResourceForm
-      title="Convex target"
+      title="Connect Convex Target"
       icon={<DatabaseBackup size={18} />}
       loading={actionLoading === "target"}
-      submitLabel="Add target"
+      submitLabel="Create target"
       onSubmit={() =>
         perform("target", async () => {
           await client.request("/api/v1/targets/cloud", {
@@ -368,83 +677,57 @@ function TargetForm({
               project_id: projectId,
               name,
               deployment,
-              deploy_key_secret_id: secretMode === "stored" ? secretId : null,
-              deploy_key_env: secretMode === "env" ? deployKeyEnv : null
+              deploy_key_secret_id: secretId || null
             })
           });
+          setName("");
           setDeployment("");
-          return "Convex target added.";
+          return "Convex cloud target created.";
         })
       }
     >
       <Field label="Project">
-        <Select value={projectId} onChange={setProjectId} items={state.projects.map((project) => [project.id, project.name])} required />
+        <Select value={projectId} onChange={setProjectId} items={(state.projects ?? []).map((project) => [project.id, project.name])} required />
       </Field>
-      <Field label="Target name">
-        <input value={name} onChange={(event) => setName(event.target.value)} required />
+      <Field label="Target label">
+        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Production Cloud" required />
       </Field>
-      <Field label="Deployment">
-        <input value={deployment} onChange={(event) => setDeployment(event.target.value)} required />
+      <Field label="Convex deployment name">
+        <input value={deployment} onChange={(event) => setDeployment(event.target.value)} placeholder="e.g. happy-animal-123" required />
       </Field>
-      <Field label="Deploy key source">
-        <select value={secretMode} onChange={(event) => setSecretMode(event.target.value as "stored" | "env")}>
-          <option value="stored">Encrypted secret</option>
-          <option value="env">Environment variable</option>
-        </select>
+      <Field label="Deploy key secret">
+        <Select value={secretId} onChange={setSecretId} items={(state.secrets ?? []).map((secret) => [secret.id, secret.label])} required />
       </Field>
-      {secretMode === "stored" ? (
-        <Field label="Stored secret">
-          <Select value={secretId} onChange={setSecretId} items={state.secrets.map((secret) => [secret.id, secret.label])} required />
-        </Field>
-      ) : (
-        <Field label="Deploy key env">
-          <input value={deployKeyEnv} onChange={(event) => setDeployKeyEnv(event.target.value)} required />
-        </Field>
-      )}
     </ResourceForm>
   );
 }
 
-function DestinationForm({
-  client,
-  state,
-  actionLoading,
-  perform
-}: {
-  client: ApiClient;
-  state: ServiceState;
-  actionLoading: string | null;
-  perform: Perform;
-}) {
-  const [kind, setKind] = useState<"local" | "s3">("local");
-  const [name, setName] = useState("Primary vault");
-  const [root, setRoot] = useState("/var/lib/convex-autobackup/backups");
+function DestinationForm({ client, state, actionLoading, perform }: { client: ApiClient; state: ServiceState; actionLoading: string | null; perform: Perform }) {
+  const [type, setType] = useState<"local" | "s3">("local");
+  const [name, setName] = useState("");
+  const [root, setRoot] = useState("/home/user/backups");
   const [bucket, setBucket] = useState("");
-  const [region, setRegion] = useState("");
-  const [endpoint, setEndpoint] = useState("");
+  const [region, setRegion] = useState("us-east-1");
   const [prefix, setPrefix] = useState("");
   const [secretId, setSecretId] = useState("");
-  const [keepLast, setKeepLast] = useState(20);
-  const [keepDays, setKeepDays] = useState(30);
 
   useEffect(() => {
-    const s3Secret = state.secrets.find((secret) => secret.kind === "s3_credentials") ?? state.secrets[0];
+    const s3Secret = (state.secrets ?? []).find((secret) => secret.kind === "s3_credentials") ?? (state.secrets ?? [])[0];
     if (!secretId && s3Secret) setSecretId(s3Secret.id);
   }, [secretId, state.secrets]);
 
   return (
     <ResourceForm
-      title="Destination"
+      title="Create Storage Destination"
       icon={<HardDrive size={18} />}
       loading={actionLoading === "destination"}
       submitLabel="Create destination"
       onSubmit={() =>
         perform("destination", async () => {
-          const retention = { keep_last: keepLast, keep_days: keepDays, keep_weeklies: 12, keep_monthlies: 12 };
-          if (kind === "local") {
+          if (type === "local") {
             await client.request("/api/v1/destinations/local", {
               method: "POST",
-              body: JSON.stringify({ name, root, retention })
+              body: JSON.stringify({ name, root })
             });
           } else {
             await client.request("/api/v1/destinations/s3", {
@@ -452,58 +735,51 @@ function DestinationForm({
               body: JSON.stringify({
                 name,
                 bucket,
-                region: region || null,
-                endpoint: endpoint || null,
+                region,
                 prefix: prefix || null,
-                credentials_secret_id: secretId,
-                retention
+                credentials_secret_id: secretId || null
               })
             });
           }
-          return "Destination created.";
+          setName("");
+          return "Storage destination created.";
         })
       }
     >
-      <Field label="Destination type">
-        <select value={kind} onChange={(event) => setKind(event.target.value as "local" | "s3")}>
-          <option value="local">Local filesystem</option>
-          <option value="s3">S3-compatible</option>
-        </select>
+      <Field label="Type">
+        <Select
+          value={type}
+          onChange={(val) => setType(val as "local" | "s3")}
+          items={[
+            ["local", "Local filesystem"],
+            ["s3", "S3-compatible object storage"]
+          ]}
+          required
+        />
       </Field>
-      <Field label="Name">
-        <input value={name} onChange={(event) => setName(event.target.value)} required />
+      <Field label="Destination name">
+        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Local Backup Folder" required />
       </Field>
-      {kind === "local" ? (
-        <Field label="Root path">
-          <input value={root} onChange={(event) => setRoot(event.target.value)} required />
+      {type === "local" ? (
+        <Field label="Root directory path">
+          <input value={root} onChange={(event) => setRoot(event.target.value)} placeholder="/home/user/backups" required />
         </Field>
       ) : (
         <>
-          <Field label="Bucket">
-            <input value={bucket} onChange={(event) => setBucket(event.target.value)} required />
+          <Field label="Bucket name">
+            <input value={bucket} onChange={(event) => setBucket(event.target.value)} placeholder="convex-backups-bucket" required />
           </Field>
           <Field label="Region">
-            <input value={region} onChange={(event) => setRegion(event.target.value)} />
+            <input value={region} onChange={(event) => setRegion(event.target.value)} placeholder="us-east-1" required />
           </Field>
-          <Field label="Endpoint">
-            <input value={endpoint} onChange={(event) => setEndpoint(event.target.value)} />
+          <Field label="Prefix (optional)">
+            <input value={prefix} onChange={(event) => setPrefix(event.target.value)} placeholder="backups/" />
           </Field>
-          <Field label="Prefix">
-            <input value={prefix} onChange={(event) => setPrefix(event.target.value)} />
-          </Field>
-          <Field label="Credentials secret">
-            <Select value={secretId} onChange={setSecretId} items={state.secrets.map((secret) => [secret.id, secret.label])} required />
+          <Field label="S3 credentials secret">
+            <Select value={secretId} onChange={setSecretId} items={(state.secrets ?? []).map((secret) => [secret.id, secret.label])} required />
           </Field>
         </>
       )}
-      <div className="two-fields">
-        <Field label="Keep last">
-          <input value={keepLast} onChange={(event) => setKeepLast(Number(event.target.value))} min={1} type="number" required />
-        </Field>
-        <Field label="Keep days">
-          <input value={keepDays} onChange={(event) => setKeepDays(Number(event.target.value))} min={1} type="number" required />
-        </Field>
-      </div>
     </ResourceForm>
   );
 }
@@ -516,14 +792,14 @@ function JobForm({ client, state, actionLoading, perform }: { client: ApiClient;
   const [includeFileStorage, setIncludeFileStorage] = useState(true);
 
   useEffect(() => {
-    if (!projectId && state.projects[0]) setProjectId(state.projects[0].id);
-    if (!targetId && state.targets[0]) setTargetId(state.targets[0].id);
-    if (!destinationId && state.destinations[0]) setDestinationId(state.destinations[0].id);
+    if (!projectId && state.projects?.[0]) setProjectId(state.projects[0].id);
+    if (!targetId && state.targets?.[0]) setTargetId(state.targets[0].id);
+    if (!destinationId && state.destinations?.[0]) setDestinationId(state.destinations[0].id);
   }, [destinationId, projectId, state.destinations, state.projects, state.targets, targetId]);
 
   return (
     <ResourceForm
-      title="Backup job"
+      title="Create Backup Job"
       icon={<Activity size={18} />}
       loading={actionLoading === "job"}
       submitLabel="Create job"
@@ -543,22 +819,18 @@ function JobForm({ client, state, actionLoading, perform }: { client: ApiClient;
         })
       }
     >
-      <Field label="Project">
-        <Select value={projectId} onChange={setProjectId} items={state.projects.map((project) => [project.id, project.name])} required />
-      </Field>
-      <Field label="Target">
-        <Select value={targetId} onChange={setTargetId} items={state.targets.map((target) => [target.id, target.name])} required />
-      </Field>
-      <Field label="Destination">
-        <Select value={destinationId} onChange={setDestinationId} items={state.destinations.map((destination) => [destination.id, destination.name])} required />
-      </Field>
       <Field label="Job name">
-        <input value={name} onChange={(event) => setName(event.target.value)} required />
+        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Daily Production Export" required />
       </Field>
-      <label className="check-row">
-        <input checked={includeFileStorage} onChange={(event) => setIncludeFileStorage(event.target.checked)} type="checkbox" />
-        Include Convex file storage
-      </label>
+      <Field label="Project">
+        <Select value={projectId} onChange={setProjectId} items={(state.projects ?? []).map((project) => [project.id, project.name])} required />
+      </Field>
+      <Field label="Convex target">
+        <Select value={targetId} onChange={setTargetId} items={(state.targets ?? []).map((target) => [target.id, target.name])} required />
+      </Field>
+      <Field label="Storage destination">
+        <Select value={destinationId} onChange={setDestinationId} items={(state.destinations ?? []).map((destination) => [destination.id, destination.name])} required />
+      </Field>
     </ResourceForm>
   );
 }

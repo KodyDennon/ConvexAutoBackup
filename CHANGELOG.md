@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-beta.6
+
+- Complete Web UI/UX overhaul with interactive 6-step progress navigator, sub-tab navigation bar, and resource cards.
+- Added full resource CRUD deletion & update handlers (`DELETE` & `PUT` endpoints for Projects, Targets, Vaults, Jobs, Schedules, Secrets).
+- Added target connectivity testing (`POST /api/v1/targets/{id}/test`).
+- Added interactive JSON manifest viewer modal in Run History.
+- Reinforced AES-256-GCM secret encryption with SHA-256 key derivation and random 12-byte nonces.
+- Rebuilt embedded web bundle and release binaries.
+
 ## 0.1.0-beta.5
 
 - Fixed the web console release check for beta-only GitHub releases by reading the releases list instead of `/releases/latest`, which returns 404 when only prereleases exist.

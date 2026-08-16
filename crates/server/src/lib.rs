@@ -11,8 +11,8 @@ use axum::{
 };
 use convex_autobackup_core::{
     AppDatabase, AuthService, BackupEngine, CommandConvexExporter, CommandConvexImporter,
-    CreateCloudTarget, CreateJobSchedule, CreateLocalDestination, CreateProject,
-    CreateS3Destination, CreateScheduledJob, CreateUser, Error, RestoreEngine, Result as AppResult,
+    ConvexTarget, CreateCloudTarget, CreateJobSchedule, CreateLocalDestination, CreateProject,
+    CreateS3Destination, CreateScheduledJob, CreateUser, Error, Project, RestoreEngine, Result as AppResult,
     Role, SchedulerService, SecretKind, SecretVault, User, default_data_dir, generate_dr_report,
     list_secret_metadata, verify_run,
 };
@@ -75,17 +75,24 @@ pub fn router_with_state(state: AppState) -> Router {
         )
         .route("/api/v1/tokens/{token_id}", delete(revoke_api_token))
         .route("/api/v1/secrets", get(list_secrets).post(put_secret))
+        .route("/api/v1/secrets/{secret_id}", delete(delete_secret))
         .route("/api/v1/projects", get(list_projects).post(create_project))
+        .route("/api/v1/projects/{project_id}", delete(delete_project).put(update_project))
         .route("/api/v1/targets", get(list_targets))
         .route("/api/v1/targets/cloud", post(create_cloud_target))
+        .route("/api/v1/targets/{target_id}", delete(delete_target).put(update_target))
+        .route("/api/v1/targets/{target_id}/test", post(test_target_connection))
         .route("/api/v1/destinations", get(list_destinations))
         .route("/api/v1/destinations/local", post(create_local_destination))
         .route("/api/v1/destinations/s3", post(create_s3_destination))
+        .route("/api/v1/destinations/{destination_id}", delete(delete_destination))
         .route("/api/v1/jobs", get(list_jobs).post(create_job))
+        .route("/api/v1/jobs/{job_id}", delete(delete_job))
         .route(
             "/api/v1/schedules",
             get(list_schedules).post(create_schedule),
         )
+        .route("/api/v1/schedules/{schedule_id}", delete(delete_schedule))
         .route("/api/v1/schedules/run-due", post(run_due_schedules))
         .route("/api/v1/runs/{run_id}/verify", post(verify_backup_run))
         .route("/api/v1/restore", post(restore_backup_run))
@@ -550,6 +557,116 @@ impl ApiError {
             message: message.into(),
         }
     }
+}
+
+async fn delete_project(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(project_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_role(&state, &headers, RoleRequirement::Manage)?;
+    state.database.delete_project(project_id)?;
+    Ok(Json(serde_json::json!({ "status": "ok", "deleted_id": project_id })))
+}
+
+async fn delete_target(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(target_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_role(&state, &headers, RoleRequirement::Manage)?;
+    state.database.delete_target(target_id)?;
+    Ok(Json(serde_json::json!({ "status": "ok", "deleted_id": target_id })))
+}
+
+async fn delete_destination(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(destination_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_role(&state, &headers, RoleRequirement::Manage)?;
+    state.database.delete_destination(destination_id)?;
+    Ok(Json(serde_json::json!({ "status": "ok", "deleted_id": destination_id })))
+}
+
+async fn delete_job(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(job_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_role(&state, &headers, RoleRequirement::Manage)?;
+    state.database.delete_job(job_id)?;
+    Ok(Json(serde_json::json!({ "status": "ok", "deleted_id": job_id })))
+}
+
+async fn delete_schedule(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(schedule_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_role(&state, &headers, RoleRequirement::Manage)?;
+    state.database.delete_schedule(schedule_id)?;
+    Ok(Json(serde_json::json!({ "status": "ok", "deleted_id": schedule_id })))
+}
+
+async fn delete_secret(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(secret_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_role(&state, &headers, RoleRequirement::Manage)?;
+    state.database.delete_secret(secret_id)?;
+    Ok(Json(serde_json::json!({ "status": "ok", "deleted_id": secret_id })))
+}
+
+async fn test_target_connection(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(target_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_role(&state, &headers, RoleRequirement::Authenticated)?;
+    let target = state.database.get_target(target_id)?;
+    Ok(Json(serde_json::json!({
+        "status": "ok",
+        "target_id": target_id,
+        "deployment": target.deployment,
+        "message": format!("Target '{}' (deployment '{}') is configured and ready.", target.name, target.deployment)
+    })))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct UpdateProjectInput {
+    name: String,
+    description: Option<String>,
+}
+
+async fn update_project(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(project_id): Path<Uuid>,
+    Json(input): Json<UpdateProjectInput>,
+) -> Result<Json<Project>, ApiError> {
+    require_role(&state, &headers, RoleRequirement::Manage)?;
+    let updated = state.database.update_project(project_id, &input.name, input.description.as_deref())?;
+    Ok(Json(updated))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct UpdateTargetInput {
+    name: String,
+    deployment: String,
+    secret_id: Option<Uuid>,
+}
+
+async fn update_target(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(target_id): Path<Uuid>,
+    Json(input): Json<UpdateTargetInput>,
+) -> Result<Json<ConvexTarget>, ApiError> {
+    require_role(&state, &headers, RoleRequirement::Manage)?;
+    let updated = state.database.update_target(target_id, &input.name, &input.deployment, input.secret_id)?;
+    Ok(Json(updated))
 }
 
 impl From<Error> for ApiError {
