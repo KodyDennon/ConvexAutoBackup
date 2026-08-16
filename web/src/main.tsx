@@ -10,6 +10,7 @@ import {
   Play,
   RefreshCw,
   RotateCcw,
+  Settings,
   ShieldCheck
 } from "lucide-react";
 import {
@@ -39,9 +40,10 @@ import { DrSection } from "./sections/dr";
 import { RunsSection } from "./sections/runs";
 import { SecuritySection } from "./sections/security";
 import { SetupSection } from "./sections/setup";
+import { SettingsSection } from "./sections/settings";
 import "./styles.css";
 
-type ActiveSection = "dashboard" | "setup" | "runs" | "security" | "dr" | "audit";
+type ActiveSection = "dashboard" | "setup" | "runs" | "security" | "dr" | "audit" | "settings";
 
 const emptyState: ServiceState = {
   health: null,
@@ -283,6 +285,9 @@ function App() {
           <NavButton active={activeSection === "audit"} icon={<ListChecks size={18} />} onClick={() => setActiveSection("audit")}>
             Audit
           </NavButton>
+          <NavButton active={activeSection === "settings"} icon={<Settings size={18} />} onClick={() => setActiveSection("settings")}>
+            Settings
+          </NavButton>
         </nav>
       </aside>
 
@@ -390,6 +395,16 @@ function App() {
         )}
         {activeSection === "dr" && <DrSection client={client} state={scopedState} actionLoading={actionLoading} perform={perform} />}
         {activeSection === "audit" && <AuditSection events={state.auditEvents} />}
+        {activeSection === "settings" && (
+          <SettingsSection
+            client={client}
+            state={state}
+            actionLoading={actionLoading}
+            perform={perform}
+            onRefresh={() => refresh(true)}
+            onInstallUpdate={handleInstallUpdate}
+          />
+        )}
       </section>
     </main>
   );

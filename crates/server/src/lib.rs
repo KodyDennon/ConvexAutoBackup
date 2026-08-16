@@ -99,6 +99,7 @@ pub fn router_with_state(state: AppState) -> Router {
         .route("/api/v1/dr/report", get(dr_report))
         .route("/api/v1/audit", get(list_audit_events))
         .route("/api/v1/system/update", post(system_update))
+        .route("/api/v1/system/wipe", post(system_wipe))
         .route("/api/v1/jobs/{job_id}/run", post(run_job))
         .route("/api/v1/runs", get(list_runs))
         .layer(CorsLayer::permissive())
@@ -718,6 +719,29 @@ async fn update_job(
         input.include_file_storage,
     )?;
     Ok(Json(updated))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct SystemWipeInput {
+    #[serde(default = "default_true")]
+    wipe_files: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+async fn system_wipe(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(input): Json<SystemWipeInput>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_role(&state, &headers, RoleRequirement::Manage)?;
+    state.database.factory_reset(input.wipe_files)?;
+    Ok(Json(serde_json::json!({
+        "status": "wiped",
+        "message": "Full factory reset completed. Database records and local backup archives have been wiped."
+    })))
 }
 
 impl From<Error> for ApiError {

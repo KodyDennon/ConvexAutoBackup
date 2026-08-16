@@ -468,6 +468,35 @@ impl AppDatabase {
         self.record_audit("system", "job.update", "job", Some(id), &format!("updated job {name}"))?;
         self.get_job(id)
     }
+
+    pub fn factory_reset(&self, wipe_files: bool) -> Result<()> {
+        let connection = self.connection()?;
+        connection.execute("DELETE FROM runs", [])?;
+        connection.execute("DELETE FROM schedules", [])?;
+        connection.execute("DELETE FROM jobs", [])?;
+        connection.execute("DELETE FROM targets", [])?;
+        connection.execute("DELETE FROM destinations", [])?;
+        connection.execute("DELETE FROM projects", [])?;
+        connection.execute("DELETE FROM secrets", [])?;
+        connection.execute("DELETE FROM audit_events", [])?;
+
+        if wipe_files {
+            let default_vault = std::path::Path::new("/home/user/backups");
+            if default_vault.exists() {
+                let _ = std::fs::remove_dir_all(default_vault);
+                let _ = std::fs::create_dir_all(default_vault);
+            }
+        }
+
+        self.record_audit(
+            "system",
+            "system.factory_reset",
+            "system",
+            None,
+            "performed full system factory reset and wiped all database records and local archives",
+        )?;
+        Ok(())
+    }
 }
 
 #[allow(dead_code)]
