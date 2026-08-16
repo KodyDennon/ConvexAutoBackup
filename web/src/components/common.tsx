@@ -292,6 +292,7 @@ export function RunList({ runs, jobs, compact = false }: { runs: RunRecord[]; jo
               manifestObj = null;
             }
           }
+          const archiveSizeBytes = manifestObj?.archive_size_bytes ?? manifestObj?.archive_size ?? manifestObj?.bytes_exported;
 
           return (
             <div className="table-row" key={record.run.id}>
@@ -316,7 +317,7 @@ export function RunList({ runs, jobs, compact = false }: { runs: RunRecord[]; jo
                       className="secondary-button small"
                       onClick={() => setActiveModalRecord(record)}
                     >
-                      <FileText size={14} /> {formatBytes(manifestObj.bytes_exported)} · Details
+                      <FileText size={14} /> {formatBytes(archiveSizeBytes)} · Details
                     </button>
                   ) : record.run.error ? (
                     <button
@@ -337,40 +338,91 @@ export function RunList({ runs, jobs, compact = false }: { runs: RunRecord[]; jo
         {runs.length === 0 && <EmptyRow message="No backup runs have been recorded." />}
       </div>
 
-      {activeModalRecord && (
-        <div className="modal-backdrop" onClick={() => setActiveModalRecord(null)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>
-                {activeModalRecord.run.status === "succeeded" ? "Backup Manifest Summary" : "Backup Error Report"} — Run #{activeModalRecord.run.id.slice(0, 8)}
-              </h3>
-              <button type="button" className="close-btn" onClick={() => setActiveModalRecord(null)}>✕</button>
-            </div>
-            <div className="modal-body stack">
-              <p><strong>Status:</strong> <span className={`status-pill ${activeModalRecord.run.status}`}>{sentenceCase(activeModalRecord.run.status)}</span></p>
-              <p><strong>Started:</strong> {formatDateTime(activeModalRecord.run.started_at)} ({relativeTime(activeModalRecord.run.started_at)})</p>
+      {activeModalRecord && (() => {
+        let manifestObj: any = null;
+        if (activeModalRecord.manifest_json) {
+          try {
+            manifestObj = JSON.parse(activeModalRecord.manifest_json);
+          } catch {}
+        }
+        const archiveSizeBytes = manifestObj?.archive_size_bytes ?? manifestObj?.archive_size ?? manifestObj?.bytes_exported;
 
-              {activeModalRecord.run.error && (
-                <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", padding: "1rem", borderRadius: "8px", color: "#991b1b" }}>
-                  <strong style={{ display: "block", marginBottom: "0.25rem" }}>Error Description:</strong>
-                  <code>{activeModalRecord.run.error}</code>
-                </div>
-              )}
+        return (
+          <div className="modal-backdrop" onClick={() => setActiveModalRecord(null)}>
+            <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>
+                  {activeModalRecord.run.status === "succeeded" ? "Backup Manifest Summary" : "Backup Error Report"} — Run #{activeModalRecord.run.id.slice(0, 8)}
+                </h3>
+                <button type="button" className="close-btn" onClick={() => setActiveModalRecord(null)}>✕</button>
+              </div>
+              <div className="modal-body stack">
+                <p><strong>Status:</strong> <span className={`status-pill ${activeModalRecord.run.status}`}>{sentenceCase(activeModalRecord.run.status)}</span></p>
+                <p><strong>Started:</strong> {formatDateTime(activeModalRecord.run.started_at)} ({relativeTime(activeModalRecord.run.started_at)})</p>
 
-              {activeModalRecord.manifest_json && (
-                <>
-                  <p><strong>Manifest Location:</strong> <code>{activeModalRecord.run.manifest_path ?? "Stored in DB"}</code></p>
-                  <h4>Manifest Payload:</h4>
-                  <pre className="json-pre">{activeModalRecord.manifest_json}</pre>
-                </>
-              )}
-            </div>
-            <div className="modal-footer">
-              <button type="button" className="secondary-button" onClick={() => setActiveModalRecord(null)}>Close</button>
+                {activeModalRecord.run.error && (
+                  <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", padding: "1rem", borderRadius: "8px", color: "#991b1b" }}>
+                    <strong style={{ display: "block", marginBottom: "0.35rem", fontSize: "0.9rem" }}>Error Message:</strong>
+                    <code style={{ display: "block", wordBreak: "break-all", whiteSpace: "pre-wrap" }}>{activeModalRecord.run.error}</code>
+                  </div>
+                )}
+
+                {activeModalRecord.manifest_json && manifestObj ? (
+                  <div className="stack gap-3" style={{ marginTop: "0.5rem" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                      <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", padding: "0.85rem", borderRadius: "8px" }}>
+                        <span className="subtle" style={{ fontSize: "0.78rem", display: "block" }}>Snapshot Archive Size</span>
+                        <strong style={{ fontSize: "1.25rem", color: "#0f172a" }}>
+                          {formatBytes(archiveSizeBytes)}
+                        </strong>
+                      </div>
+                      <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", padding: "0.85rem", borderRadius: "8px" }}>
+                        <span className="subtle" style={{ fontSize: "0.78rem", display: "block" }}>Export Duration</span>
+                        <strong style={{ fontSize: "1.25rem", color: "#0f172a" }}>
+                          {manifestObj.duration_seconds !== undefined ? `${manifestObj.duration_seconds} seconds` : "N/A"}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", padding: "0.85rem", borderRadius: "8px" }}>
+                      <span className="subtle" style={{ fontSize: "0.78rem", display: "block" }}>Target Deployment</span>
+                      <code style={{ fontSize: "0.9rem", color: "#0369a1", fontWeight: 700 }}>{manifestObj.deployment}</code>
+                    </div>
+
+                    <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", padding: "0.85rem", borderRadius: "8px" }}>
+                      <span className="subtle" style={{ fontSize: "0.78rem", display: "block" }}>Storage Path / URI</span>
+                      <p style={{ margin: "0.2rem 0 0", wordBreak: "break-all", fontFamily: "monospace", fontSize: "0.8rem", color: "#334155" }}>
+                        {manifestObj.storage_uri ?? activeModalRecord.run.manifest_path ?? "Local storage"}
+                      </p>
+                    </div>
+
+                    <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", padding: "0.85rem", borderRadius: "8px" }}>
+                      <span className="subtle" style={{ fontSize: "0.78rem", display: "block" }}>SHA-256 Integrity Checksum</span>
+                      <code style={{ display: "block", wordBreak: "break-all", fontSize: "0.78rem", color: "#2563eb", marginTop: "0.2rem" }}>
+                        {manifestObj.sha256}
+                      </code>
+                    </div>
+
+                    <details style={{ marginTop: "0.5rem" }}>
+                      <summary style={{ cursor: "pointer", fontSize: "0.85rem", fontWeight: 600, color: "#64748b" }}>
+                        View Raw Technical Manifest JSON
+                      </summary>
+                      <pre className="json-pre" style={{ marginTop: "0.5rem" }}>{activeModalRecord.manifest_json}</pre>
+                    </details>
+                  </div>
+                ) : (
+                  activeModalRecord.manifest_json && (
+                    <pre className="json-pre">{activeModalRecord.manifest_json}</pre>
+                  )
+                )}
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="secondary-button" onClick={() => setActiveModalRecord(null)}>Close</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </>
   );
 }

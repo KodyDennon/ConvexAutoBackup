@@ -208,6 +208,19 @@ export function buildDashboardStats(input: DashboardInput): DashboardStat[] {
   const latestRunReady: Readiness =
     latestRun?.status === "succeeded" ? "ready" : latestRun ? "at_risk" : "needs_setup";
 
+  let totalStorageBytes = 0;
+  let successfulCount = 0;
+  for (const record of runs) {
+    if (record.manifest_json) {
+      try {
+        const parsed = JSON.parse(record.manifest_json);
+        const bytes = parsed.archive_size_bytes ?? parsed.archive_size ?? parsed.bytes_exported ?? 0;
+        totalStorageBytes += Number(bytes) || 0;
+        successfulCount++;
+      } catch {}
+    }
+  }
+
   return [
     {
       label: "Protected deployments",
@@ -216,12 +229,10 @@ export function buildDashboardStats(input: DashboardInput): DashboardStat[] {
       readiness: targets.length > 0 && jobs.length > 0 ? "ready" : "needs_setup"
     },
     {
-      label: "Destinations",
-      value: destinations.length.toLocaleString("en-US"),
-      detail: destinations.some((destination) => destination.kind.type === "s3_compatible")
-        ? "Local and offsite options configured"
-        : "Add S3-compatible offsite storage for stronger DR",
-      readiness: destinations.length > 0 ? "ready" : "needs_setup"
+      label: "Vault storage used",
+      value: formatBytes(totalStorageBytes),
+      detail: `${successfulCount} verified snapshot archive${successfulCount === 1 ? "" : "s"} stored`,
+      readiness: totalStorageBytes > 0 ? "ready" : "needs_setup"
     },
     {
       label: "Next scheduled run",
