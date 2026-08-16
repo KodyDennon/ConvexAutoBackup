@@ -189,11 +189,11 @@ function App() {
       if (message) {
         setNotice(message);
       }
-      await refresh(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Action failed");
     } finally {
       setActionLoading(null);
+      await refresh(false);
     }
   };
 

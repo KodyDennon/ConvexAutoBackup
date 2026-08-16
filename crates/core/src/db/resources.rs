@@ -320,6 +320,7 @@ impl AppDatabase {
 
     pub fn delete_project(&self, id: Uuid) -> Result<()> {
         let connection = self.connection()?;
+        connection.execute("DELETE FROM runs WHERE job_id IN (SELECT id FROM jobs WHERE project_id = ?1)", params![id.to_string()])?;
         connection.execute("DELETE FROM schedules WHERE job_id IN (SELECT id FROM jobs WHERE project_id = ?1)", params![id.to_string()])?;
         connection.execute("DELETE FROM jobs WHERE project_id = ?1", params![id.to_string()])?;
         connection.execute("DELETE FROM targets WHERE project_id = ?1", params![id.to_string()])?;
@@ -327,42 +328,45 @@ impl AppDatabase {
         if count == 0 {
             return Err(error!("project {id} does not exist"));
         }
-        self.record_audit("system", "project.delete", "project", Some(id), "deleted project and associated targets/jobs")?;
+        self.record_audit("system", "project.delete", "project", Some(id), "deleted project and associated targets/jobs/runs")?;
         Ok(())
     }
 
     pub fn delete_target(&self, id: Uuid) -> Result<()> {
         let connection = self.connection()?;
+        connection.execute("DELETE FROM runs WHERE job_id IN (SELECT id FROM jobs WHERE target_id = ?1)", params![id.to_string()])?;
         connection.execute("DELETE FROM schedules WHERE job_id IN (SELECT id FROM jobs WHERE target_id = ?1)", params![id.to_string()])?;
         connection.execute("DELETE FROM jobs WHERE target_id = ?1", params![id.to_string()])?;
         let count = connection.execute("DELETE FROM targets WHERE id = ?1", params![id.to_string()])?;
         if count == 0 {
             return Err(error!("target {id} does not exist"));
         }
-        self.record_audit("system", "target.delete", "target", Some(id), "deleted target and associated jobs")?;
+        self.record_audit("system", "target.delete", "target", Some(id), "deleted target and associated jobs/runs")?;
         Ok(())
     }
 
     pub fn delete_destination(&self, id: Uuid) -> Result<()> {
         let connection = self.connection()?;
+        connection.execute("DELETE FROM runs WHERE job_id IN (SELECT id FROM jobs WHERE destination_id = ?1)", params![id.to_string()])?;
         connection.execute("DELETE FROM schedules WHERE job_id IN (SELECT id FROM jobs WHERE destination_id = ?1)", params![id.to_string()])?;
         connection.execute("DELETE FROM jobs WHERE destination_id = ?1", params![id.to_string()])?;
         let count = connection.execute("DELETE FROM destinations WHERE id = ?1", params![id.to_string()])?;
         if count == 0 {
             return Err(error!("destination {id} does not exist"));
         }
-        self.record_audit("system", "destination.delete", "destination", Some(id), "deleted destination and associated jobs")?;
+        self.record_audit("system", "destination.delete", "destination", Some(id), "deleted destination and associated jobs/runs")?;
         Ok(())
     }
 
     pub fn delete_job(&self, id: Uuid) -> Result<()> {
         let connection = self.connection()?;
+        connection.execute("DELETE FROM runs WHERE job_id = ?1", params![id.to_string()])?;
         connection.execute("DELETE FROM schedules WHERE job_id = ?1", params![id.to_string()])?;
         let count = connection.execute("DELETE FROM jobs WHERE id = ?1", params![id.to_string()])?;
         if count == 0 {
             return Err(error!("job {id} does not exist"));
         }
-        self.record_audit("system", "job.delete", "job", Some(id), "deleted backup job")?;
+        self.record_audit("system", "job.delete", "job", Some(id), "deleted backup job and associated runs/schedules")?;
         Ok(())
     }
 
