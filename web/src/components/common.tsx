@@ -323,6 +323,11 @@ export function RunList({ runs, jobs, compact = false }: { runs: RunRecord[]; jo
               </span>
               <span>
                 <strong>{jobs.find((job) => job.id === record.run.job_id)?.name ?? record.run.job_id.slice(0, 8)}</strong>
+                {manifestObj?.deployment && (
+                  <span style={{ display: "block", fontSize: "0.78rem", color: "#0369a1", fontWeight: 600 }}>
+                    {manifestObj.deployment}
+                  </span>
+                )}
               </span>
               <span title={formatDateTime(record.run.started_at)}>
                 {relativeTime(record.run.started_at)}
