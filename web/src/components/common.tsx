@@ -2,12 +2,16 @@ import React, { FormEvent, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  FileText,
   ListChecks,
   Plus,
   type LucideIcon
 } from "lucide-react";
 import {
+  formatBytes,
   formatDateTime,
+  formatDurationMs,
+  relativeTime,
   sentenceCase,
   type BackupJob,
   type RunRecord
@@ -103,9 +107,9 @@ export function NavButton({
   children: React.ReactNode;
 }) {
   return (
-    <button className={active ? "nav-item active" : "nav-item"} type="button" onClick={onClick}>
+    <button className={`nav-button ${active ? "active" : ""}`} type="button" onClick={onClick}>
       {icon}
-      {children}
+      <span>{children}</span>
     </button>
   );
 }
@@ -120,24 +124,75 @@ export function SystemMessages({
   oneTimeToken: string | null;
 }) {
   return (
-    <>
+    <div className="system-messages">
       {error && (
-        <div className="message error-message">
-          <AlertTriangle size={17} /> {error}
+        <div className="alert danger">
+          <AlertTriangle size={18} />
+          <span>{error}</span>
         </div>
       )}
       {notice && (
-        <div className="message notice-message">
-          <CheckCircle2 size={17} /> {notice}
+        <div className="alert success">
+          <CheckCircle2 size={18} />
+          <span>{notice}</span>
         </div>
       )}
       {oneTimeToken && (
-        <div className="token-box">
-          <span>One-time token</span>
-          <code>{oneTimeToken}</code>
+        <div className="alert info">
+          <ListChecks size={18} />
+          <div>
+            <strong>Auth Token:</strong> <code>{oneTimeToken}</code>
+          </div>
         </div>
       )}
-    </>
+    </div>
+  );
+}
+
+export function KeyValueGrid({ items }: { items: Array<[string, string | number | boolean | null | undefined]> }) {
+  return (
+    <dl className="kv-grid">
+      {items.map(([key, value]) => (
+        <div key={key}>
+          <dt>{key}</dt>
+          <dd>{value === null || value === undefined ? "N/A" : String(value)}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+export function CardList({
+  title,
+  subtitle,
+  items
+}: {
+  title: string;
+  subtitle?: string;
+  items: Array<{ id: string; title: string; subtitle?: string; value?: string; badge?: string }>;
+}) {
+  return (
+    <div className="card-list">
+      <div className="card-list-header">
+        <h3>{title}</h3>
+        {subtitle && <p>{subtitle}</p>}
+      </div>
+      <div className="card-list-items">
+        {items.map((item) => (
+          <div className="item-card" key={item.id}>
+            <div>
+              <strong>{item.title}</strong>
+              {item.subtitle && <p>{item.subtitle}</p>}
+            </div>
+            <div>
+              {item.value && <span>{item.value}</span>}
+              {item.badge && <span className="badge">{item.badge}</span>}
+            </div>
+          </div>
+        ))}
+        {items.length === 0 && <p className="empty">None configured.</p>}
+      </div>
+    </div>
   );
 }
 
@@ -217,7 +272,7 @@ export function EmptyRow({ message }: { message: string }) {
 }
 
 export function RunList({ runs, jobs, compact = false }: { runs: RunRecord[]; jobs: BackupJob[]; compact?: boolean }) {
-  const [activeManifestRecord, setActiveManifestRecord] = useState<RunRecord | null>(null);
+  const [activeModalRecord, setActiveModalRecord] = useState<RunRecord | null>(null);
 
   return (
     <>
@@ -226,48 +281,92 @@ export function RunList({ runs, jobs, compact = false }: { runs: RunRecord[]; jo
           <span>Status</span>
           <span>Job</span>
           <span>Started</span>
-          {!compact && <span>Manifest Details</span>}
+          {!compact && <span>Size & Details</span>}
         </div>
-        {runs.map((record) => (
-          <div className="table-row" key={record.run.id}>
-            <span className={`status-pill ${record.run.status}`}>{sentenceCase(record.run.status)}</span>
-            <span>{jobs.find((job) => job.id === record.run.job_id)?.name ?? record.run.job_id.slice(0, 8)}</span>
-            <span>{formatDateTime(record.run.started_at)}</span>
-            {!compact && (
+        {runs.map((record) => {
+          let manifestObj: any = null;
+          if (record.manifest_json) {
+            try {
+              manifestObj = JSON.parse(record.manifest_json);
+            } catch {
+              manifestObj = null;
+            }
+          }
+
+          return (
+            <div className="table-row" key={record.run.id}>
               <span>
-                {record.manifest_json ? (
-                  <button
-                    type="button"
-                    className="secondary-button small"
-                    onClick={() => setActiveManifestRecord(record)}
-                  >
-                    View Manifest
-                  </button>
-                ) : (
-                  <span className="subtle">{record.run.error ? `Error: ${record.run.error}` : record.run.manifest_path ?? "Pending"}</span>
-                )}
+                <span className={`status-pill ${record.run.status}`}>
+                  {record.run.status === "succeeded" && "✓ "}
+                  {record.run.status === "failed" && "✕ "}
+                  {sentenceCase(record.run.status)}
+                </span>
               </span>
-            )}
-          </div>
-        ))}
+              <span>
+                <strong>{jobs.find((job) => job.id === record.run.job_id)?.name ?? record.run.job_id.slice(0, 8)}</strong>
+              </span>
+              <span title={formatDateTime(record.run.started_at)}>
+                {relativeTime(record.run.started_at)}
+              </span>
+              {!compact && (
+                <span>
+                  {manifestObj ? (
+                    <button
+                      type="button"
+                      className="secondary-button small"
+                      onClick={() => setActiveModalRecord(record)}
+                    >
+                      <FileText size={14} /> {formatBytes(manifestObj.bytes_exported)} · Details
+                    </button>
+                  ) : record.run.error ? (
+                    <button
+                      type="button"
+                      className="danger-button small"
+                      onClick={() => setActiveModalRecord(record)}
+                    >
+                      <AlertTriangle size={14} /> View Error
+                    </button>
+                  ) : (
+                    <span className="subtle">In Progress</span>
+                  )}
+                </span>
+              )}
+            </div>
+          );
+        })}
         {runs.length === 0 && <EmptyRow message="No backup runs have been recorded." />}
       </div>
 
-      {activeManifestRecord && (
-        <div className="modal-backdrop" onClick={() => setActiveManifestRecord(null)}>
+      {activeModalRecord && (
+        <div className="modal-backdrop" onClick={() => setActiveModalRecord(null)}>
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Backup Manifest — Run #{activeManifestRecord.run.id.slice(0, 8)}</h3>
-              <button type="button" className="close-btn" onClick={() => setActiveManifestRecord(null)}>✕</button>
+              <h3>
+                {activeModalRecord.run.status === "succeeded" ? "Backup Manifest Summary" : "Backup Error Report"} — Run #{activeModalRecord.run.id.slice(0, 8)}
+              </h3>
+              <button type="button" className="close-btn" onClick={() => setActiveModalRecord(null)}>✕</button>
             </div>
             <div className="modal-body stack">
-              <p><strong>Status:</strong> <span className={`status-pill ${activeManifestRecord.run.status}`}>{sentenceCase(activeManifestRecord.run.status)}</span></p>
-              <p><strong>Manifest Path:</strong> <code>{activeManifestRecord.run.manifest_path ?? "N/A"}</code></p>
-              <h4>Raw Manifest JSON:</h4>
-              <pre className="json-pre">{activeManifestRecord.manifest_json}</pre>
+              <p><strong>Status:</strong> <span className={`status-pill ${activeModalRecord.run.status}`}>{sentenceCase(activeModalRecord.run.status)}</span></p>
+              <p><strong>Started:</strong> {formatDateTime(activeModalRecord.run.started_at)} ({relativeTime(activeModalRecord.run.started_at)})</p>
+
+              {activeModalRecord.run.error && (
+                <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", padding: "1rem", borderRadius: "8px", color: "#991b1b" }}>
+                  <strong style={{ display: "block", marginBottom: "0.25rem" }}>Error Description:</strong>
+                  <code>{activeModalRecord.run.error}</code>
+                </div>
+              )}
+
+              {activeModalRecord.manifest_json && (
+                <>
+                  <p><strong>Manifest Location:</strong> <code>{activeModalRecord.run.manifest_path ?? "Stored in DB"}</code></p>
+                  <h4>Manifest Payload:</h4>
+                  <pre className="json-pre">{activeModalRecord.manifest_json}</pre>
+                </>
+              )}
             </div>
             <div className="modal-footer">
-              <button type="button" className="secondary-button" onClick={() => setActiveManifestRecord(null)}>Close</button>
+              <button type="button" className="secondary-button" onClick={() => setActiveModalRecord(null)}>Close</button>
             </div>
           </div>
         </div>

@@ -79,9 +79,8 @@ function App() {
 
   const client = useMemo(() => new ApiClient(token), [token]);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const refresh = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     try {
       const health = await new ApiClient(null).request<HealthResponse>("/api/v1/health");
       if (!health.users_configured || !token) {
@@ -130,15 +129,24 @@ function App() {
         drReport: normalizeDrReport(drReport.dr_report)
       });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Failed to load service state");
+      if (showLoading) {
+        setError(caught instanceof Error ? caught.message : "Failed to load service state");
+      }
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   }, [client, token]);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    void refresh(true);
+    if (!token) return;
+    const interval = setInterval(() => {
+      void refresh(false);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [refresh, token]);
 
   useEffect(() => {
     const version = state.health?.version;
@@ -178,7 +186,7 @@ function App() {
       if (message) {
         setNotice(message);
       }
-      await refresh();
+      await refresh(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Action failed");
     } finally {
@@ -187,6 +195,7 @@ function App() {
   };
 
   const stats = useMemo(() => dashboardStats(state), [state]);
+  const isBackupRunning = (state.runs ?? []).some((r) => r.run.status === "queued") || actionLoading !== null;
 
   if (loading && !state.health) {
     return (
@@ -267,14 +276,38 @@ function App() {
             </p>
           </div>
           <div className="topbar-actions">
-            <button className="secondary-button" type="button" onClick={() => void refresh()} disabled={loading}>
-              <RefreshCw size={16} /> Refresh
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                padding: "0.4rem 0.85rem",
+                borderRadius: "9999px",
+                background: isBackupRunning ? "#eff6ff" : "#f0fdf4",
+                border: `1px solid ${isBackupRunning ? "#93c5fd" : "#bbf7d0"}`,
+                fontSize: "0.82rem",
+                fontWeight: 600,
+                color: isBackupRunning ? "#1d4ed8" : "#15803d"
+              }}
+            >
+              <span className={`pulse-dot ${isBackupRunning ? "running" : ""}`} />
+              {isBackupRunning ? "Backup In Progress..." : "System Active (Live)"}
+            </div>
+            <button className="secondary-button" type="button" onClick={() => void refresh(true)} disabled={loading}>
+              <RefreshCw size={16} className={loading ? "spin" : ""} /> Refresh
             </button>
             <button className="secondary-button danger-text" type="button" onClick={logout}>
               <LogOut size={16} /> Sign out
             </button>
           </div>
         </header>
+
+        {isBackupRunning && (
+          <div className="live-banner">
+            <RefreshCw className="spin" size={18} />
+            <span>Backup run currently in progress — live monitoring updates every 3s...</span>
+          </div>
+        )}
 
         <SystemMessages error={error} notice={notice ?? updateNotice} oneTimeToken={oneTimeToken} />
 

@@ -293,3 +293,22 @@ export function relativeTime(value: string): string {
 export function sentenceCase(value: string): string {
   return value.replaceAll("_", " ").replace(/^\w/, (match) => match.toUpperCase());
 }
+
+export function formatBytes(bytes?: number | null): string {
+  if (bytes === null || bytes === undefined || isNaN(bytes)) return "N/A";
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+}
+
+export function formatDurationMs(ms?: number | null): string {
+  if (ms === null || ms === undefined || isNaN(ms)) return "N/A";
+  if (ms < 1000) return `${ms}ms`;
+  const secs = (ms / 1000).toFixed(1);
+  if (parseFloat(secs) < 60) return `${secs}s`;
+  const mins = Math.floor(ms / 60000);
+  const remSecs = Math.round((ms % 60000) / 1000);
+  return `${mins}m ${remSecs}s`;
+}
