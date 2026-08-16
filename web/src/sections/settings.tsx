@@ -10,7 +10,8 @@ export function SettingsSection({
   actionLoading,
   perform,
   onRefresh,
-  onInstallUpdate
+  onInstallUpdate,
+  onLogout
 }: {
   client: ApiClient;
   state: ServiceState;
@@ -18,6 +19,7 @@ export function SettingsSection({
   perform: Perform;
   onRefresh: () => Promise<void>;
   onInstallUpdate: () => void;
+  onLogout: () => void;
 }) {
   const [showWipeModal, setShowWipeModal] = useState(false);
   const [confirmText, setConfirmText] = useState("");
@@ -188,13 +190,13 @@ export function SettingsSection({
                 disabled={confirmText.trim() !== "WIPE-EVERYTHING" || actionLoading === "system-wipe"}
                 onClick={() =>
                   void perform("system-wipe", async () => {
-                    const res = await client.request<{ message: string }>("/api/v1/system/wipe", {
+                    await client.request<{ message: string }>("/api/v1/system/wipe", {
                       method: "POST",
                       body: JSON.stringify({ wipe_files: wipeFiles })
                     });
                     setShowWipeModal(false);
-                    await onRefresh();
-                    return res.message ?? "System factory reset completed cleanly.";
+                    onLogout();
+                    return "Full factory reset complete. Account and system data wiped cleanly.";
                   })
                 }
               >

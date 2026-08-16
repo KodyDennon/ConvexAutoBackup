@@ -403,6 +403,7 @@ function App() {
             perform={perform}
             onRefresh={() => refresh(true)}
             onInstallUpdate={handleInstallUpdate}
+            onLogout={logout}
           />
         )}
       </section>

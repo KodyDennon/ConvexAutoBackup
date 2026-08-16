@@ -479,6 +479,8 @@ impl AppDatabase {
         connection.execute("DELETE FROM projects", [])?;
         connection.execute("DELETE FROM secrets", [])?;
         connection.execute("DELETE FROM audit_events", [])?;
+        connection.execute("DELETE FROM api_tokens", [])?;
+        connection.execute("DELETE FROM users", [])?;
 
         if wipe_files {
             let default_vault = std::path::Path::new("/home/user/backups");
