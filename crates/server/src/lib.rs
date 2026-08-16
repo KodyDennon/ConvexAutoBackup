@@ -452,6 +452,7 @@ struct RestoreRequest {
     run_id: Uuid,
     target_id: Uuid,
     confirm_deployment: String,
+    confirm_phrase: String,
 }
 
 async fn restore_backup_run(
@@ -468,6 +469,7 @@ async fn restore_backup_run(
                 input.run_id,
                 input.target_id,
                 &input.confirm_deployment,
+                &input.confirm_phrase,
                 &importer
             )
             .await?

@@ -315,13 +315,14 @@ async fn main() -> Result<()> {
             run_id,
             target_id,
             confirm_deployment,
+            confirm_phrase,
             json,
         } => {
             let database = AppDatabase::open(&database_path)?;
             let restore = RestoreEngine::new(database);
             let importer = CommandConvexImporter::for_data_dir(&data_dir);
             let result = restore
-                .restore_run_to_target(run_id, target_id, &confirm_deployment, &importer)
+                .restore_run_to_target(run_id, target_id, &confirm_deployment, &confirm_phrase, &importer)
                 .await?;
             print_output(json, &serde_json::json!({ "restore": result }))?;
         }

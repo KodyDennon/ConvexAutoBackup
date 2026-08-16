@@ -21,6 +21,8 @@ pub struct RestoreResult {
     pub import_output: String,
 }
 
+pub const REQUIRED_RESTORE_PHRASE: &str = "RESTORE MY CONVEX DATABASE";
+
 impl RestoreEngine {
     pub fn new(database: AppDatabase) -> Self {
         Self { database }
@@ -31,13 +33,19 @@ impl RestoreEngine {
         run_id: Uuid,
         target_id: Uuid,
         confirmed_deployment: &str,
+        confirm_phrase: &str,
         importer: &dyn ConvexImporter,
     ) -> Result<RestoreResult> {
         let target = self.database.get_target(target_id)?;
-        if confirmed_deployment != target.deployment {
+        if confirmed_deployment.trim() != target.deployment {
             return Err(error!(
                 "deployment confirmation mismatch: expected {}",
                 target.deployment
+            ));
+        }
+        if confirm_phrase.trim() != REQUIRED_RESTORE_PHRASE {
+            return Err(error!(
+                "safety phrase mismatch: expected exact confirmation phrase '{REQUIRED_RESTORE_PHRASE}'"
             ));
         }
         let verification = verify_run(&self.database, run_id).await?;
@@ -173,7 +181,13 @@ mod tests {
 
         assert!(
             restore
-                .restore_run_to_target(backup.run_id, target.id, "wrong", &FixtureImporter)
+                .restore_run_to_target(backup.run_id, target.id, "wrong", REQUIRED_RESTORE_PHRASE, &FixtureImporter)
+                .await
+                .is_err()
+        );
+        assert!(
+            restore
+                .restore_run_to_target(backup.run_id, target.id, "prod:careful-otter-123", "WRONG PHRASE", &FixtureImporter)
                 .await
                 .is_err()
         );
@@ -182,6 +196,7 @@ mod tests {
                 backup.run_id,
                 target.id,
                 "prod:careful-otter-123",
+                REQUIRED_RESTORE_PHRASE,
                 &FixtureImporter,
             )
             .await

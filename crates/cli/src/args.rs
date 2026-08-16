@@ -106,6 +106,8 @@ pub(crate) enum Command {
         #[arg(long)]
         confirm_deployment: String,
         #[arg(long)]
+        confirm_phrase: String,
+        #[arg(long)]
         json: bool,
     },
     /// Generate disaster recovery evidence.
