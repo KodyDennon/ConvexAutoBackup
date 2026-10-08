@@ -587,7 +587,7 @@ checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
 
 [[package]]
 name = "convex-autobackup"
-version = "0.1.0-beta.6"
+version = "0.1.0-beta.7"
 dependencies = [
  "assert_cmd",
  "axum",
@@ -604,7 +604,7 @@ dependencies = [
 
 [[package]]
 name = "convex-autobackup-core"
-version = "0.1.0-beta.6"
+version = "0.1.0-beta.7"
 dependencies = [
  "aes-gcm 0.11.0",
  "age",
@@ -629,7 +629,7 @@ dependencies = [
 
 [[package]]
 name = "convex-autobackup-mcp"
-version = "0.1.0-beta.6"
+version = "0.1.0-beta.7"
 dependencies = [
  "firstparty-error",
  "serde",
@@ -638,7 +638,7 @@ dependencies = [
 
 [[package]]
 name = "convex-autobackup-server"
-version = "0.1.0-beta.6"
+version = "0.1.0-beta.7"
 dependencies = [
  "axum",
  "convex-autobackup-core",
@@ -656,7 +656,7 @@ dependencies = [
 
 [[package]]
 name = "convex-autobackup-worker"
-version = "0.1.0-beta.6"
+version = "0.1.0-beta.7"
 dependencies = [
  "clap",
  "convex-autobackup-core",
@@ -971,7 +971,7 @@ checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 
 [[package]]
 name = "firstparty-error"
-version = "0.1.0-beta.6"
+version = "0.1.0-beta.7"
 dependencies = [
  "chrono",
  "reqwest",

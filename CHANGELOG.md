@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-beta.7
 
 - Added passphrase encryption for backups (age/scrypt). Archives are stored as standard `.zip.age` files that `age -d` or `convex-autobackup decrypt` can open without the app. Manifests (schema v2) record the encryption key reference plus plaintext and stored checksums.
 - Backup jobs can write one export to several destinations (e.g. local + Cloudflare R2). Each copy is tracked per run; a failed copy marks the run `partial` instead of losing the others.

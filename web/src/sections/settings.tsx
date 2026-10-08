@@ -51,7 +51,7 @@ export function SettingsSection({
           <div className="inventory-list">
             <div className="inventory-row">
               <span>Service Version</span>
-              <strong>{health?.version ?? "0.1.0-beta.6"}</strong>
+              <strong>{health?.version ?? "0.1.0-beta.7"}</strong>
             </div>
             <div className="inventory-row">
               <span>Database Path</span>

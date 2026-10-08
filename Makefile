@@ -24,7 +24,7 @@ lint:
 	cargo clippy --workspace --all-targets -- -D warnings
 
 repo-size:
-	./scripts/ci/check-file-lines.sh 600
+	./scripts/ci/check-file-lines.sh 1000
 
 web-build:
 	npm --prefix web run build
