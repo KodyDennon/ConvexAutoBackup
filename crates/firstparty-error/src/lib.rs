@@ -44,6 +44,10 @@ impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Message(message) => formatter.write_str(message),
+            // `{:#}` includes the cause chain (like anyhow) so user-facing messages say why.
+            Self::Source { message, source } if formatter.alternate() => {
+                write!(formatter, "{message}: {source:#}")
+            }
             Self::Source { message, .. } => formatter.write_str(message),
         }
     }
@@ -164,6 +168,19 @@ mod tests {
 
         assert_eq!(err.to_string(), "failed to read config");
         assert!(err.source().is_some());
+    }
+
+    #[test]
+    fn alternate_display_includes_cause_chain() {
+        let inner = std::fs::read_to_string("/path/that/does/not/exist")
+            .context("failed to read config")
+            .unwrap_err();
+        let outer: Result<()> = Err(inner).context("startup failed");
+        let text = format!("{:#}", outer.unwrap_err());
+        assert!(
+            text.starts_with("startup failed: failed to read config: "),
+            "{text}"
+        );
     }
 
     #[test]

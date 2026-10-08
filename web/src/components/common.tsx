@@ -14,7 +14,8 @@ import {
   relativeTime,
   sentenceCase,
   type BackupJob,
-  type RunRecord
+  type RunRecord,
+  type StorageDestination
 } from "../appState";
 
 export function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -289,7 +290,50 @@ export function EmptyRow({ message }: { message: string }) {
   return <p className="empty">{message}</p>;
 }
 
-export function RunList({ runs, jobs, compact = false }: { runs: RunRecord[]; jobs: BackupJob[]; compact?: boolean }) {
+function copyIsEncrypted(manifestJson?: string | null): boolean {
+  if (!manifestJson) return false;
+  try {
+    return Boolean(JSON.parse(manifestJson)?.encryption);
+  } catch {
+    return false;
+  }
+}
+
+function StoredCopies({ record, destinations }: { record: RunRecord; destinations: StorageDestination[] }) {
+  const copies = record.copies ?? [];
+  if (copies.length === 0) return null;
+  return (
+    <div className="stack" style={{ gap: "0.4rem" }}>
+      <strong style={{ fontSize: "0.9rem" }}>Stored copies</strong>
+      <ul className="copy-list">
+        {copies.map((copy) => {
+          const destination = destinations.find((d) => d.id === copy.destination_id);
+          return (
+            <li key={copy.destination_id}>
+              <span className={`status-pill ${copy.status}`}>{sentenceCase(copy.status)}</span>
+              <strong>{destination?.name ?? "Deleted destination"}</strong>
+              {copyIsEncrypted(copy.manifest_json) && <span className="badge success">Encrypted</span>}
+              {copy.storage_uri && <code>{copy.storage_uri}</code>}
+              {copy.error && <span className="danger-text">{copy.error}</span>}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+export function RunList({
+  runs,
+  jobs,
+  destinations = [],
+  compact = false
+}: {
+  runs: RunRecord[];
+  jobs: BackupJob[];
+  destinations?: StorageDestination[];
+  compact?: boolean;
+}) {
   const [activeModalRecord, setActiveModalRecord] = useState<RunRecord | null>(null);
 
   return (
@@ -340,7 +384,8 @@ export function RunList({ runs, jobs, compact = false }: { runs: RunRecord[]; jo
                       className="secondary-button small"
                       onClick={() => setActiveModalRecord(record)}
                     >
-                      <FileText size={14} /> {formatBytes(archiveSizeBytes)} · Details
+                      <FileText size={14} /> {formatBytes(archiveSizeBytes)}
+                      {(record.copies?.length ?? 0) > 1 && ` · ${record.copies?.filter((copy) => copy.status === "succeeded").length}/${record.copies?.length} copies`} · Details
                     </button>
                   ) : record.run.error ? (
                     <button
@@ -419,8 +464,10 @@ export function RunList({ runs, jobs, compact = false }: { runs: RunRecord[]; jo
                       </p>
                     </div>
 
+                    <StoredCopies record={activeModalRecord} destinations={destinations} />
+
                     <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", padding: "0.85rem", borderRadius: "8px" }}>
-                      <span className="subtle" style={{ fontSize: "0.78rem", display: "block" }}>SHA-256 Integrity Checksum</span>
+                      <span className="subtle" style={{ fontSize: "0.78rem", display: "block" }}>SHA-256 Integrity Checksum (unencrypted zip)</span>
                       <code style={{ display: "block", wordBreak: "break-all", fontSize: "0.78rem", color: "#2563eb", marginTop: "0.2rem" }}>
                         {manifestObj.sha256}
                       </code>

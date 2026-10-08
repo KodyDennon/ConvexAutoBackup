@@ -84,7 +84,8 @@ describe("dashboard state helpers", () => {
               started_at: "2026-07-03T11:30:00Z",
               finished_at: "2026-07-03T11:31:00Z",
               manifest_path: "/vault/manifest.json"
-            }
+            },
+            manifest_json: JSON.stringify({ archive_size_bytes: 57_668_113, sha256: "abc" })
           }
         ],
         drReport: {

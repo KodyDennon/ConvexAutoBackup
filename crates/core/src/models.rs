@@ -64,8 +64,22 @@ pub enum StorageKind {
 #[serde(rename_all = "snake_case")]
 pub enum EncryptionMode {
     Disabled,
-    AgeX25519 { recipient: String },
-    ManagedKey { key_ref: SecretRef },
+    AgeX25519 {
+        recipient: String,
+    },
+    ManagedKey {
+        key_ref: SecretRef,
+    },
+    /// age scrypt passphrase encryption; the passphrase lives in the secret vault.
+    Passphrase {
+        key_ref: SecretRef,
+    },
+}
+
+impl EncryptionMode {
+    pub fn is_enabled(&self) -> bool {
+        !matches!(self, Self::Disabled)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -93,12 +107,26 @@ pub struct BackupJob {
     pub project_id: Uuid,
     pub target_id: Uuid,
     pub destination_id: Uuid,
+    /// Extra destinations that receive a copy of the same export.
+    #[serde(default)]
+    pub additional_destination_ids: Vec<Uuid>,
     pub name: String,
     pub include_file_storage: bool,
     pub schedule_enabled: bool,
 }
 
 impl BackupJob {
+    /// Primary destination first, then additional destinations.
+    pub fn all_destination_ids(&self) -> Vec<Uuid> {
+        let mut ids = vec![self.destination_id];
+        for id in &self.additional_destination_ids {
+            if !ids.contains(id) {
+                ids.push(*id);
+            }
+        }
+        ids
+    }
+
     pub fn full_backup(
         project_id: Uuid,
         target_id: Uuid,
@@ -110,6 +138,7 @@ impl BackupJob {
             project_id,
             target_id,
             destination_id,
+            additional_destination_ids: Vec::new(),
             name: name.into(),
             include_file_storage: true,
             schedule_enabled: true,

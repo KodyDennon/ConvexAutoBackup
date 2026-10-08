@@ -1,0 +1,392 @@
+/* Setup wizard and empty-state call to action. Loaded after polish.css. */
+
+.add-project-button {
+  background: #2f8f6a;
+  margin-top: 1.5rem;
+  width: 100%;
+}
+
+.add-project-button:hover {
+  background: #37a47a;
+}
+
+.wizard {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 270px minmax(0, 1fr);
+}
+
+.wizard-steps {
+  background: #ffffff;
+  border: 1px solid #dce4dd;
+  border-radius: 10px;
+  padding: 1rem;
+  position: sticky;
+  top: 1rem;
+}
+
+.wizard-steps ol {
+  display: grid;
+  gap: 0.25rem;
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.wizard-step {
+  align-items: center;
+  background: transparent;
+  color: #31413c;
+  font-weight: 500;
+  gap: 0.7rem;
+  justify-content: flex-start;
+  min-height: 52px;
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  width: 100%;
+}
+
+.wizard-step:hover:not(:disabled) {
+  background: #f1f5f2;
+}
+
+.wizard-step:disabled {
+  opacity: 0.45;
+}
+
+.wizard-step strong,
+.wizard-step small {
+  display: block;
+}
+
+.wizard-step strong {
+  font-size: 0.92rem;
+}
+
+.wizard-step small {
+  color: #65736e;
+  font-size: 0.78rem;
+}
+
+.wizard-step-icon {
+  align-items: center;
+  background: #edf2ef;
+  border-radius: 999px;
+  color: #31413c;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.82rem;
+  font-weight: 700;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.wizard-step.active {
+  background: #eaf4ef;
+  box-shadow: inset 3px 0 0 #226b52;
+}
+
+.wizard-step.active .wizard-step-icon {
+  background: #226b52;
+  color: #ffffff;
+}
+
+.wizard-step.done .wizard-step-icon {
+  background: transparent;
+  color: #22863a;
+}
+
+.wizard-exit {
+  margin-top: 0.75rem;
+  width: 100%;
+}
+
+.wizard-panel {
+  display: grid;
+  gap: 1.25rem;
+  min-height: 520px;
+  padding: 1.5rem;
+}
+
+.wizard-step-body header h2 {
+  font-size: 1.35rem;
+  margin-bottom: 0.3rem;
+}
+
+.wizard-step-body header {
+  margin-bottom: 1rem;
+}
+
+.wizard-step-body .primary-button {
+  justify-self: start;
+}
+
+.wizard-footer {
+  align-items: center;
+  align-self: end;
+  border-top: 1px solid #edf1ee;
+  display: flex;
+  justify-content: space-between;
+  padding-top: 1rem;
+}
+
+.check-list,
+.progress-list {
+  display: grid;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.check-list li,
+.progress-list li {
+  align-items: flex-start;
+  border: 1px solid #e3e9e5;
+  border-radius: 8px;
+  display: flex;
+  gap: 0.65rem;
+  padding: 0.7rem 0.85rem;
+}
+
+.check-list li span,
+.progress-list li span {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.check-list small,
+.progress-list small {
+  color: #65736e;
+  font-size: 0.82rem;
+}
+
+.check-list li.ok svg,
+.progress-list li.done svg {
+  color: #22863a;
+}
+
+.check-list li.bad,
+.progress-list li.failed {
+  background: #fff6f6;
+  border-color: #f1c4c4;
+}
+
+.check-list li.bad svg,
+.progress-list li.failed svg {
+  color: #b42318;
+}
+
+.progress-list li.failed small {
+  color: #9b2c2c;
+}
+
+.check-list li.info svg,
+.progress-list li.pending svg {
+  color: #94a3a0;
+}
+
+.progress-list li.running svg {
+  color: #2563eb;
+}
+
+.choice-card {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dce4dd;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+}
+
+.choice-card:has(input:checked) {
+  background: #f1faf5;
+  border-color: #8fcfb0;
+}
+
+.choice-card > span {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.choice-card small {
+  color: #65736e;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.group-label {
+  color: #31413c;
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.segmented {
+  background: #edf2ef;
+  border-radius: 9px;
+  display: inline-flex;
+  gap: 0.25rem;
+  justify-self: start;
+  padding: 0.25rem;
+}
+
+.segmented button {
+  background: transparent;
+  color: #31413c;
+  font-weight: 600;
+  min-height: 34px;
+  padding: 0.35rem 0.9rem;
+}
+
+.segmented button.active {
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(16, 33, 29, 0.12);
+  color: #18332c;
+}
+
+.input-with-action {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.input-with-action input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.small-print {
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.callout {
+  align-items: flex-start;
+  display: block;
+}
+
+.callout > svg {
+  margin-right: 0.35rem;
+  vertical-align: -3px;
+}
+
+.callout.success {
+  background: #f1faf4;
+  border: 1px solid #bfe3cb;
+  color: #215c39;
+}
+
+.meter {
+  align-items: center;
+  display: flex;
+  gap: 0.6rem;
+}
+
+.meter span {
+  background: #e5ebe7;
+  border-radius: 999px;
+  flex: 1 1 auto;
+  height: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+.meter span::after {
+  background: #b42318;
+  border-radius: 999px;
+  content: "";
+  inset: 0 auto 0 0;
+  position: absolute;
+  transition: width 0.2s ease, background 0.2s ease;
+  width: 0;
+}
+
+.meter-1 span::after { width: 33%; background: #b42318; }
+.meter-2 span::after { width: 66%; background: #c58a0d; }
+.meter-3 span::after { width: 100%; background: #22863a; }
+
+.meter small {
+  color: #65736e;
+  font-size: 0.78rem;
+  min-width: 64px;
+}
+
+.review-list {
+  display: grid;
+  gap: 0.6rem 1.25rem;
+  grid-template-columns: max-content minmax(0, 1fr);
+  margin: 0;
+}
+
+.review-list dt {
+  color: #65736e;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.review-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.wizard-success {
+  background: #f1faf4;
+  border: 1px solid #bfe3cb;
+  border-radius: 12px;
+  color: #215c39;
+  display: grid;
+  justify-items: center;
+  padding: 1.75rem;
+  text-align: center;
+}
+
+.wizard-success h3 {
+  font-size: 1.3rem;
+  margin: 0.5rem 0 0.25rem;
+}
+
+.wizard-success p {
+  margin: 0;
+  max-width: 46ch;
+}
+
+@media (max-width: 900px) {
+  .wizard {
+    grid-template-columns: 1fr;
+  }
+
+  .wizard-steps {
+    position: static;
+  }
+
+  .wizard-steps ol {
+    display: flex;
+    overflow-x: auto;
+  }
+
+  .wizard-step {
+    min-width: 170px;
+  }
+
+  .add-project-button {
+    margin-top: 0.75rem;
+  }
+
+  .review-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+.empty-cta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}

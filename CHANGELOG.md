@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- Added passphrase encryption for backups (age/scrypt). Archives are stored as standard `.zip.age` files that `age -d` or `convex-autobackup decrypt` can open without the app. Manifests (schema v2) record the encryption key reference plus plaintext and stored checksums.
+- Backup jobs can write one export to several destinations (e.g. local + Cloudflare R2). Each copy is tracked per run; a failed copy marks the run `partial` instead of losing the others.
+- S3-compatible storage is now complete: restore and verify read from S3/R2, retention prunes S3/R2, destinations have a write/read/delete connection test, and object keys use RFC 3986 encoding (fixes signature mismatches for keys containing `.`, `-`, `_`).
+- New setup wizard (“Add project”): system checks, live read-only deploy key validation, storage selection (including a server-provided Cloudflare R2 preset), encryption, schedule, one-step creation with resumable retries, and a verified first backup.
+- Target connection test now really contacts Convex (read-only table listing) instead of only echoing configuration.
+- Fixed restore: `convex import` now receives the archive positionally with `--yes` (the previous `--path` flag does not exist for import).
+- Convex CLI pinned to 1.46.0.
+- Docker: hardened image (non-root, read-only root filesystem, tini, healthcheck, baked-in Convex CLI, `--locked` builds) and a compose file with an optional Cloudflare Tunnel sidecar (`--profile tunnel`). Added `scripts/docker-update.sh` and `scripts/cloudflare-provision.py` (R2 bucket + bucket-scoped token, tunnel, DNS, Access).
+- Self-update and factory-reset no longer use hard-coded host paths; factory reset only removes backup archives and manifests in configured local destinations.
+- User-facing errors now include their underlying cause.
+- UI polish: fixed invisible setup step labels, collapsed inline code blocks, overlapping panels, oversized checkboxes and missing navigation/inventory styles; improved mobile layout.
+
 ## 0.1.0-beta.6
 
 - Complete Web UI/UX overhaul with interactive 6-step progress navigator, sub-tab navigation bar, and resource cards.

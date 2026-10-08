@@ -71,11 +71,18 @@ export interface RetentionPolicy {
   keep_monthlies?: number | null;
 }
 
+export type EncryptionMode =
+  | "disabled"
+  | { passphrase: { key_ref: { id: string; label: string } } }
+  | { age_x25519: { recipient: string } }
+  | { managed_key: { key_ref: { id: string; label: string } } };
+
 export interface StorageDestination {
   id: string;
   team_id: string;
   name: string;
   kind: StorageKind;
+  encryption?: EncryptionMode;
   retention: RetentionPolicy;
 }
 
@@ -84,6 +91,7 @@ export interface BackupJob {
   project_id: string;
   target_id: string;
   destination_id: string;
+  additional_destination_ids?: string[];
   name: string;
   include_file_storage: boolean;
   schedule_enabled: boolean;
@@ -113,9 +121,21 @@ export interface BackupRun {
   error?: string | null;
 }
 
+export interface RunCopy {
+  run_id: string;
+  destination_id: string;
+  position: number;
+  status: BackupStatus;
+  storage_uri?: string | null;
+  manifest_path?: string | null;
+  manifest_json?: string | null;
+  error?: string | null;
+}
+
 export interface RunRecord {
   run: BackupRun;
   manifest_json?: string | null;
+  copies?: RunCopy[];
 }
 
 export interface AuditEvent {
@@ -243,7 +263,9 @@ export function buildDashboardStats(input: DashboardInput): DashboardStat[] {
     {
       label: "Latest backup",
       value: latestRunText,
-      detail: latestRun?.manifest_path ?? latestRun?.error ?? "Run a job to produce the first manifest",
+      detail: latestRun
+        ? latestRun.error ?? `Started ${formatDateTime(latestRun.started_at)}; archive and manifest stored`
+        : "Run a job to produce the first manifest",
       readiness: latestRunReady
     },
     {
@@ -266,6 +288,29 @@ export function describeSchedule(schedule: Schedule): string {
     return `Weekly on ${sentenceCase(schedule.weekday)} at ${schedule.time}`;
   }
   return schedule.expression;
+}
+
+export function isEncrypted(destination: StorageDestination): boolean {
+  return destination.encryption !== undefined && destination.encryption !== "disabled";
+}
+
+export function isR2Endpoint(endpoint?: string | null): boolean {
+  return Boolean(endpoint && /\.r2\.cloudflarestorage\.com/i.test(endpoint));
+}
+
+export function destinationTypeLabel(destination: StorageDestination): string {
+  if (destination.kind.type === "local_filesystem") return "Local Folder";
+  return isR2Endpoint(destination.kind.endpoint) ? "Cloudflare R2" : "S3 Bucket";
+}
+
+/** Normalizes a pasted deployment name (strips `prod:`-style prefixes and stray characters). */
+export function cleanDeploymentName(raw: string): string {
+  return raw.trim().replace(/[^a-zA-Z0-9_.:-]/g, "");
+}
+
+/** All destination ids a job writes to, primary first. */
+export function jobDestinationIds(job: BackupJob): string[] {
+  return [job.destination_id, ...(job.additional_destination_ids ?? []).filter((id) => id !== job.destination_id)];
 }
 
 export function destinationLabel(destination: StorageDestination): string {

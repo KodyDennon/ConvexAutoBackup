@@ -8,6 +8,7 @@ import {
   ListChecks,
   LogOut,
   Play,
+  Plus,
   RefreshCw,
   RotateCcw,
   Settings,
@@ -40,10 +41,13 @@ import { DrSection } from "./sections/dr";
 import { RunsSection } from "./sections/runs";
 import { SecuritySection } from "./sections/security";
 import { SetupSection } from "./sections/setup";
+import { SetupWizard } from "./sections/wizard";
 import { SettingsSection } from "./sections/settings";
 import "./styles.css";
+import "./polish.css";
+import "./wizard.css";
 
-type ActiveSection = "dashboard" | "setup" | "runs" | "security" | "dr" | "audit" | "settings";
+type ActiveSection = "wizard" | "dashboard" | "setup" | "runs" | "security" | "dr" | "audit" | "settings";
 
 const emptyState: ServiceState = {
   health: null,
@@ -81,6 +85,8 @@ function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const [updateNotice, setUpdateNotice] = useState<string | null>(null);
   const [oneTimeToken, setOneTimeToken] = useState<string | null>(null);
+  const [wizardKey, setWizardKey] = useState(0);
+  const [autoOpenedWizard, setAutoOpenedWizard] = useState(false);
 
   const client = useMemo(() => new ApiClient(token), [token]);
 
@@ -152,6 +158,20 @@ function App() {
     }, 3000);
     return () => clearInterval(interval);
   }, [refresh, token]);
+
+  // A fresh install (signed in, nothing configured yet) opens straight into the setup wizard.
+  useEffect(() => {
+    if (autoOpenedWizard || !token || !state.health?.users_configured || loading) return;
+    setAutoOpenedWizard(true);
+    if ((state.jobs ?? []).length === 0 && (state.projects ?? []).length === 0) {
+      setActiveSection("wizard");
+    }
+  }, [autoOpenedWizard, loading, state.health, state.jobs, state.projects, token]);
+
+  const openWizard = () => {
+    setWizardKey((key) => key + 1);
+    setActiveSection("wizard");
+  };
 
   useEffect(() => {
     const version = state.health?.version;
@@ -266,6 +286,9 @@ function App() {
             <span>Self-hosted DR</span>
           </div>
         </div>
+        <button type="button" className="add-project-button" onClick={openWizard}>
+          <Plus size={18} /> Add project
+        </button>
         <nav aria-label="Primary">
           <NavButton active={activeSection === "dashboard"} icon={<Activity size={18} />} onClick={() => setActiveSection("dashboard")}>
             Dashboard
@@ -294,45 +317,28 @@ function App() {
       <section className="content">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Local/LAN control plane</p>
+            <p className="eyebrow">Self-hosted backup &amp; disaster recovery</p>
             <h1>Convex backup operations</h1>
             <p className="subtle">
-              {state.health?.service} {state.health?.version} · {state.health?.database_path}
+              {state.health?.service} v{state.health?.version}
             </p>
           </div>
           <div className="topbar-actions">
             {/* Project Scope Switcher */}
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", background: "#ffffff", border: "1px solid #cbd5e1", padding: "0.4rem 0.85rem", borderRadius: "8px", boxShadow: "0 1px 2px rgba(0,0,0,0.04)" }}>
-              <FolderGit2 size={16} style={{ color: "#0284c7" }} />
-              <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.03em" }}>Project Scope:</span>
-              <select
-                value={selectedProjectId}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
-                style={{ border: "none", background: "transparent", fontWeight: 700, fontSize: "0.85rem", color: "#0f172a", cursor: "pointer", outline: "none" }}
-              >
-                <option value="all">⚡ All Projects ({(state.projects ?? []).length})</option>
+            <label className="scope-switcher">
+              <FolderGit2 size={16} aria-hidden="true" />
+              <span>Project</span>
+              <select value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)}>
+                <option value="all">All projects ({(state.projects ?? []).length})</option>
                 {(state.projects ?? []).map((p) => (
-                  <option key={p.id} value={p.id}>📁 {p.name}</option>
+                  <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
-            </div>
+            </label>
 
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                padding: "0.4rem 0.85rem",
-                borderRadius: "9999px",
-                background: isBackupRunning ? "#eff6ff" : "#f0fdf4",
-                border: `1px solid ${isBackupRunning ? "#93c5fd" : "#bbf7d0"}`,
-                fontSize: "0.82rem",
-                fontWeight: 600,
-                color: isBackupRunning ? "#1d4ed8" : "#15803d"
-              }}
-            >
+            <div className={`live-pill ${isBackupRunning ? "running" : ""}`}>
               <span className={`pulse-dot ${isBackupRunning ? "running" : ""}`} />
-              {isBackupRunning ? "Backup In Progress..." : "System Active (Live)"}
+              {isBackupRunning ? "Backup in progress…" : "Live"}
             </div>
             <button className="secondary-button" type="button" onClick={() => void refresh(true)} disabled={loading}>
               <RefreshCw size={16} className={loading ? "spin" : ""} /> Refresh
@@ -372,6 +378,29 @@ function App() {
           onInstallUpdate={handleInstallUpdate}
           updating={actionLoading === "system-update"}
         />
+
+        {activeSection !== "wizard" && (state.jobs ?? []).length === 0 && (
+          <div className="callout info empty-cta">
+            <span>
+              <strong>Nothing is being backed up yet.</strong> The setup wizard connects a Convex project, storage,
+              encryption and a schedule in a few minutes.
+            </span>
+            <button type="button" className="primary-button small" onClick={openWizard}>
+              <Plus size={14} /> Start setup wizard
+            </button>
+          </div>
+        )}
+
+        {activeSection === "wizard" && (
+          <SetupWizard
+            key={wizardKey}
+            client={client}
+            state={state}
+            refresh={() => refresh(false)}
+            onFinished={() => setActiveSection("dashboard")}
+            onCancel={(state.jobs ?? []).length > 0 ? () => setActiveSection("dashboard") : undefined}
+          />
+        )}
 
         {activeSection === "dashboard" && (
           <Dashboard

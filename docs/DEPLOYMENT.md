@@ -65,6 +65,19 @@ ghcr.io/kodydennon/convex-autobackup
 kodydoty/convex-autobackup
 ```
 
+### Hardened compose with Cloudflare Tunnel
+
+`docker-compose.yml` runs the app read-only as a non-root user with all capabilities dropped, publishes it on host loopback only, and can add a `cloudflared` sidecar:
+
+```bash
+# Secrets live outside the repo, mode 600:
+#   CONVEX_AUTOBACKUP_MASTER_KEY, TUNNEL_TOKEN, optional CONVEX_AUTOBACKUP_PRESET_R2_*
+docker compose --env-file ~/.convex-autobackup/docker.env --profile tunnel up -d --build
+scripts/docker-update.sh   # later: pull, rebuild, restart; data volume is kept
+```
+
+`scripts/cloudflare-provision.py` creates everything Cloudflare-side with the account global key (used only to mint scoped credentials): an R2 bucket and an API token scoped to that bucket, a remotely-managed tunnel routing the hostname to `http://app:8976`, a proxied DNS record, and an Access application restricted to the given emails. It writes `TUNNEL_TOKEN` into the env file and the R2 S3 credentials to a private JSON file; copy those into the `CONVEX_AUTOBACKUP_PRESET_R2_*` variables to offer the bucket in the setup wizard.
+
 ## Cargo Install
 
 Rust users can install the CLI from crates.io:

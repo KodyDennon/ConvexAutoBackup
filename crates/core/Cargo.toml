@@ -13,13 +13,13 @@ categories = ["database", "filesystem", "web-programming"]
 
 [dependencies]
 aes-gcm.workspace = true
+age.workspace = true
 argon2.workspace = true
 base64.workspace = true
 chrono.workspace = true
 getrandom.workspace = true
 hmac.workspace = true
 hex.workspace = true
-percent-encoding.workspace = true
 reqwest.workspace = true
 rusqlite.workspace = true
 serde.workspace = true

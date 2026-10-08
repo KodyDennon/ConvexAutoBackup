@@ -1,0 +1,325 @@
+/* UI polish layer: loaded after styles.css and overrides it where needed. */
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: #226b52;
+  flex: 0 0 auto;
+  height: 1.05rem;
+  min-height: 0;
+  padding: 0;
+  width: 1.05rem;
+}
+
+.checkbox-row,
+.check-row {
+  align-items: center;
+  color: #31413c;
+  cursor: pointer;
+  display: flex;
+  font-size: 0.92rem;
+  gap: 0.55rem;
+  line-height: 1.35;
+}
+
+/* Sidebar navigation */
+.nav-button {
+  background: transparent;
+  border-radius: 8px;
+  color: #b9cdc5;
+  font-weight: 600;
+  justify-content: flex-start;
+  min-height: 40px;
+  padding: 0.6rem 0.8rem;
+  text-align: left;
+  transition: background 0.12s ease, color 0.12s ease;
+  width: 100%;
+}
+
+.nav-button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+}
+
+.nav-button.active {
+  background: #226b52;
+  box-shadow: inset 3px 0 0 #7fd3b0;
+  color: #ffffff;
+}
+
+/* Header */
+.topbar h1 {
+  letter-spacing: -0.02em;
+}
+
+.topbar .subtle {
+  font-size: 0.85rem;
+  margin-bottom: 0;
+}
+
+.topbar-actions {
+  align-items: center;
+  justify-content: flex-end;
+  max-width: 560px;
+}
+
+.scope-switcher {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d5dfd9;
+  border-radius: 8px;
+  display: flex;
+  gap: 0.45rem;
+  min-height: 42px;
+  padding: 0 0.75rem;
+}
+
+.scope-switcher span {
+  color: #65736e;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.scope-switcher select {
+  background: transparent;
+  border: 0;
+  font-weight: 700;
+  min-height: 0;
+  padding: 0.2rem 0;
+  width: auto;
+}
+
+.live-pill {
+  align-items: center;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  color: #15803d;
+  display: flex;
+  font-size: 0.82rem;
+  font-weight: 600;
+  gap: 0.5rem;
+  min-height: 42px;
+  padding: 0 0.85rem;
+}
+
+.live-pill.running {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+/* Key / value inventory rows */
+.inventory-list {
+  display: grid;
+  gap: 0;
+}
+
+.inventory-row {
+  align-items: baseline;
+  border-bottom: 1px solid #edf1ee;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 0.45rem 0;
+}
+
+.inventory-row:last-child {
+  border-bottom: 0;
+}
+
+.inventory-row > :last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+/* Setup navigator: step buttons inherit dark text, not the white button color */
+.setup-step-btn {
+  color: #18332c;
+  font-weight: 600;
+}
+
+.setup-step strong {
+  color: #18332c;
+  font-size: 0.92rem;
+}
+
+/* Cards and badges */
+.grid.split-even {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.resource-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.resource-card-header {
+  gap: 0.75rem;
+}
+
+.resource-card p {
+  margin: 0;
+}
+
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.badge {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.25rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.badge.warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.primary-button.small,
+.button-primary-action.small {
+  font-size: 0.8rem;
+  min-height: 32px;
+  padding: 0.35rem 0.65rem;
+}
+
+.button-primary-action {
+  margin-top: 0;
+}
+
+.copy-list {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.35rem 0 0;
+  padding: 0;
+}
+
+.copy-list li {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  gap: 0.45rem;
+  list-style: none;
+}
+
+.callout {
+  border-radius: 8px;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  padding: 0.6rem 0.8rem;
+}
+
+.callout.warning {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #991b1b;
+}
+
+.callout.info {
+  background: #f0f7ff;
+  border: 1px solid #cce3ff;
+  color: #1a365d;
+}
+
+@media (max-width: 1240px) {
+  .setup-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    display: grid;
+  }
+
+  .topbar-actions {
+    justify-content: flex-start;
+    max-width: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .nav-button {
+    justify-content: center;
+  }
+
+  .setup-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.table-row.jobs-table-row {
+  grid-template-columns: 1fr 1fr 1.2fr 1.2fr 0.8fr auto;
+}
+
+@media (max-width: 680px) {
+  .table-row.jobs-table-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.field .checkbox-row span,
+.field .check-row span {
+  color: #31413c;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.chip {
+  align-items: center;
+  background: #edf2ef;
+  border-radius: 999px;
+  color: #18332c;
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 600;
+  gap: 0.25rem;
+  margin: 0.1rem 0.3rem 0.1rem 0;
+  padding: 0.15rem 0.6rem;
+}
+
+@media (max-width: 860px) {
+  .grid.split-even {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  nav {
+    display: flex;
+    gap: 0.35rem;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+  }
+
+  .nav-button {
+    flex: 0 0 auto;
+    width: auto;
+  }
+
+  .nav-button.active {
+    box-shadow: none;
+  }
+
+  .resource-card-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .topbar-actions > * {
+    flex: 1 1 auto;
+  }
+}
+
+
+.metric p {
+  overflow-wrap: anywhere;
+}

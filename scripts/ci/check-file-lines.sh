@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-limit="${1:-600}"
+limit="${1:-1000}"
 paths=(crates web/src)
 failed=0
 

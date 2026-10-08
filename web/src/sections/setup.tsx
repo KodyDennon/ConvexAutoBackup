@@ -3,14 +3,21 @@ import { Activity, CheckCircle2, DatabaseBackup, HardDrive, KeyRound, Layers, Pe
 import {
   ApiClient,
   destinationLabel,
+  destinationTypeLabel,
   formatDateTime,
+  isEncrypted,
+  cleanDeploymentName,
+  jobDestinationIds,
   sentenceCase,
   type SecretKind,
-  type ServiceState
+  type ServiceState,
+  type StorageDestination
 } from "../appState";
 import { secretKinds } from "../constants";
 import { Field, ResourceForm, Select } from "../components/common";
 import { ScheduleForm } from "./setupScheduleForm";
+import { DestinationChecklist, DestinationEncryptionControls, DestinationForm } from "./setupDestinations";
+import { EditJobModal, EditTargetModal } from "./setupModals";
 import "./setupGuide.css";
 
 type Perform = (key: string, action: () => Promise<string | null | undefined>) => Promise<void>;
@@ -326,8 +333,11 @@ function TabWorkspace({
     return (
       <div className="tab-container stack">
         <div className="info-banner">
-          <strong>Step 4: Configure Storage Vault</strong>
-          <p>Choose where backup zip archives will be stored: a local folder path (e.g. <code>/home/user/backups</code>) or an S3 bucket.</p>
+          <strong>Step 4: Storage destinations</strong>
+          <p>
+            Add a local folder and an offsite copy such as Cloudflare R2. Turn on passphrase encryption so backups are
+            unreadable without your passphrase — even to someone with access to the bucket.
+          </p>
         </div>
         <div className="grid split-even">
           <DestinationForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
@@ -341,11 +351,33 @@ function TabWorkspace({
                   <div key={d.id} className="resource-card">
                     <div className="resource-card-header">
                       <strong>{d.name}</strong>
-                      <span className="badge">{d.kind.type === "local_filesystem" ? "Local Folder" : "S3 Bucket"}</span>
+                      <span className="badge">{destinationTypeLabel(d)}</span>
                     </div>
                     <p className="subtle">{destinationLabel(d)}</p>
-                    <code className="tiny-code">Retention: Keep last {d.retention.keep_last} backups</code>
+                    <div className="badge-row">
+                      {isEncrypted(d) ? (
+                        <span className="badge success"><ShieldCheck size={12} /> Encrypted</span>
+                      ) : (
+                        <span className="badge warning">Not encrypted</span>
+                      )}
+                      <span className="badge">Keeps newest {d.retention.keep_last ?? "all"}</span>
+                    </div>
                     <div className="card-actions">
+                      <button
+                        className="secondary-button small"
+                        type="button"
+                        disabled={actionLoading === `test-dest-${d.id}`}
+                        onClick={() =>
+                          void perform(`test-dest-${d.id}`, async () => {
+                            const result = await client.request<{ ok: boolean; detail: string }>(`/api/v1/destinations/${d.id}/test`, { method: "POST" });
+                            if (!result.ok) throw new Error(`Test failed: ${result.detail}`);
+                            return `“${d.name}” works: ${result.detail}.`;
+                          })
+                        }
+                      >
+                        <CheckCircle2 size={14} /> Test
+                      </button>
+                      <DestinationEncryptionControls destination={d} client={client} actionLoading={actionLoading} perform={perform} />
                       <button
                         className="danger-button small"
                         type="button"
@@ -375,8 +407,8 @@ function TabWorkspace({
     return (
       <div className="tab-container stack">
         <div className="info-banner">
-          <strong>Step 5: Create Backup Job & Test Run</strong>
-          <p>A Backup Job links your Convex Target and Storage Vault together. Once created, click <strong>▶ Run Backup Now</strong> to test immediate export!</p>
+          <strong>Step 5: Backup job</strong>
+          <p>A job exports one Convex deployment and saves a copy to each selected destination. Use <strong>Run Backup Now</strong> to test it.</p>
         </div>
         <div className="grid split-even">
           <JobForm client={client} state={state} actionLoading={actionLoading} perform={perform} />
@@ -388,7 +420,9 @@ function TabWorkspace({
               <div className="card-list">
                 {jobs.map((j) => {
                   const target = targets.find((t) => t.id === j.target_id);
-                  const dest = destinations.find((d) => d.id === j.destination_id);
+                  const jobDestinations = jobDestinationIds(j)
+                    .map((id) => destinations.find((d) => d.id === id))
+                    .filter((d): d is StorageDestination => Boolean(d));
                   return (
                     <div key={j.id} className="resource-card job-card">
                       <div className="resource-card-header">
@@ -396,7 +430,15 @@ function TabWorkspace({
                         <span className="badge success">Ready to Run</span>
                       </div>
                       <p>Target: <code>{target?.deployment ?? j.target_id}</code></p>
-                      <p>Vault: <code>{dest?.name ?? j.destination_id}</code></p>
+                      <p>
+                        Saves to:{" "}
+                        {jobDestinations.map((d) => (
+                          <span className="chip" key={d.id} title={isEncrypted(d) ? "Encrypted" : "Not encrypted"}>
+                            {isEncrypted(d) && <ShieldCheck size={12} aria-label="encrypted" />}
+                            {d.name}
+                          </span>
+                        ))}
+                      </p>
                       <div className="card-actions">
                         <button
                           className="button-primary-action"
@@ -723,9 +765,6 @@ function SecretForm({ client, actionLoading, perform }: { client: ApiClient; act
   );
 }
 
-function cleanDeploymentName(raw: string): string {
-  return raw.trim().replace(/[^a-zA-Z0-9_.:-]/g, "");
-}
 
 function TargetForm({ client, state, actionLoading, perform }: { client: ApiClient; state: ServiceState; actionLoading: string | null; perform: Perform }) {
   const [projectId, setProjectId] = useState("");
@@ -814,94 +853,13 @@ function TargetForm({ client, state, actionLoading, perform }: { client: ApiClie
   );
 }
 
-function DestinationForm({ client, state, actionLoading, perform }: { client: ApiClient; state: ServiceState; actionLoading: string | null; perform: Perform }) {
-  const [type, setType] = useState<"local" | "s3">("local");
-  const [name, setName] = useState("");
-  const [root, setRoot] = useState("/home/user/backups");
-  const [bucket, setBucket] = useState("");
-  const [region, setRegion] = useState("us-east-1");
-  const [prefix, setPrefix] = useState("");
-  const [secretId, setSecretId] = useState("");
-
-  useEffect(() => {
-    const s3Secret = (state.secrets ?? []).find((secret) => secret.kind === "s3_credentials") ?? (state.secrets ?? [])[0];
-    if (!secretId && s3Secret) setSecretId(s3Secret.id);
-  }, [secretId, state.secrets]);
-
-  return (
-    <ResourceForm
-      title="Create Storage Destination"
-      icon={<HardDrive size={18} />}
-      loading={actionLoading === "destination"}
-      submitLabel="Create destination"
-      onSubmit={() =>
-        perform("destination", async () => {
-          if (type === "local") {
-            await client.request("/api/v1/destinations/local", {
-              method: "POST",
-              body: JSON.stringify({ name, root })
-            });
-          } else {
-            await client.request("/api/v1/destinations/s3", {
-              method: "POST",
-              body: JSON.stringify({
-                name,
-                bucket,
-                region,
-                prefix: prefix || null,
-                credentials_secret_id: secretId || null
-              })
-            });
-          }
-          setName("");
-          return "Storage destination created.";
-        })
-      }
-    >
-      <Field label="Type">
-        <Select
-          value={type}
-          onChange={(val) => setType(val as "local" | "s3")}
-          items={[
-            ["local", "Local filesystem"],
-            ["s3", "S3-compatible object storage"]
-          ]}
-          required
-        />
-      </Field>
-      <Field label="Destination name">
-        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Local Backup Folder" required />
-      </Field>
-      {type === "local" ? (
-        <Field label="Root directory path">
-          <input value={root} onChange={(event) => setRoot(event.target.value)} placeholder="/home/user/backups" required />
-        </Field>
-      ) : (
-        <>
-          <Field label="Bucket name">
-            <input value={bucket} onChange={(event) => setBucket(event.target.value)} placeholder="convex-backups-bucket" required />
-          </Field>
-          <Field label="Region">
-            <input value={region} onChange={(event) => setRegion(event.target.value)} placeholder="us-east-1" required />
-          </Field>
-          <Field label="Prefix (optional)">
-            <input value={prefix} onChange={(event) => setPrefix(event.target.value)} placeholder="backups/" />
-          </Field>
-          <Field label="S3 credentials secret">
-            <Select value={secretId} onChange={setSecretId} items={(state.secrets ?? []).map((secret) => [secret.id, secret.label])} required />
-          </Field>
-        </>
-      )}
-    </ResourceForm>
-  );
-}
-
 function JobForm({ client, state, actionLoading, perform }: { client: ApiClient; state: ServiceState; actionLoading: string | null; perform: Perform }) {
   const [projectId, setProjectId] = useState("");
   const [targetId, setTargetId] = useState("");
   const [destinationId, setDestinationId] = useState("");
   const [name, setName] = useState("Full backup");
   const [includeFileStorage, setIncludeFileStorage] = useState(true);
+  const [extraDestinations, setExtraDestinations] = useState<string[]>([]);
 
   useEffect(() => {
     if (!projectId && state.projects?.[0]) {
@@ -941,10 +899,12 @@ function JobForm({ client, state, actionLoading, perform }: { client: ApiClient;
               project_id: projectId,
               target_id: targetId,
               destination_id: destinationId,
+              additional_destination_ids: extraDestinations.filter((id) => id !== destinationId),
               name,
               include_file_storage: includeFileStorage
             })
           });
+          setExtraDestinations([]);
           return `Backup job "${name}" created successfully.`;
         })
       }
@@ -969,181 +929,17 @@ function JobForm({ client, state, actionLoading, perform }: { client: ApiClient;
           />
         )}
       </Field>
-      <Field label="Storage Vault Destination">
+      <Field label="Primary destination">
         <Select value={destinationId} onChange={setDestinationId} items={(state.destinations ?? []).map((destination) => [destination.id, destination.name])} required />
       </Field>
+      <div className="field">
+        <span>Also copy each backup to</span>
+        <DestinationChecklist state={state} primaryId={destinationId} selected={extraDestinations} setSelected={setExtraDestinations} />
+      </div>
+      <label className="checkbox-row">
+        <input type="checkbox" checked={includeFileStorage} onChange={(event) => setIncludeFileStorage(event.target.checked)} />
+        <span>Include file storage</span>
+      </label>
     </ResourceForm>
-  );
-}
-
-function EditTargetModal({
-  target,
-  state,
-  client,
-  perform,
-  onClose
-}: {
-  target: any;
-  state: ServiceState;
-  client: ApiClient;
-  perform: Perform;
-  onClose: () => void;
-}) {
-  const [name, setName] = useState(target.name);
-  const [deployment, setDeployment] = useState(target.deployment);
-  const [url, setUrl] = useState(target.url ?? "");
-  const [secretId, setSecretId] = useState(target.secret?.id ?? "");
-
-  const deployKeySecrets = (state.secrets ?? []).filter((s) => s.kind === "convex_deploy_key");
-
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Edit Target Deployment — {target.name}</h3>
-          <button type="button" className="close-btn" onClick={onClose}>✕</button>
-        </div>
-        <div className="modal-body stack">
-          <Field label="Target Label">
-            <input value={name} onChange={(e) => setName(e.target.value)} required />
-          </Field>
-          <Field label="Convex Deployment Name">
-            <input value={deployment} onChange={(e) => setDeployment(cleanDeploymentName(e.target.value))} required />
-          </Field>
-          <Field label="Convex Cloud / Data API URL (Optional)">
-            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder={`https://${deployment}.convex.cloud`} />
-          </Field>
-          <Field label="Assigned Deploy Key Secret">
-            <Select
-              value={secretId}
-              onChange={setSecretId}
-              items={deployKeySecrets.map((s) => [s.id, `${s.label} (ID: ${s.id.slice(0, 8)})`])}
-              required
-            />
-          </Field>
-        </div>
-        <div className="modal-footer button-row">
-          <button type="button" className="secondary-button" onClick={onClose}>Cancel</button>
-          <button
-            type="button"
-            className="primary-button"
-            onClick={() =>
-              void perform(`update-target-${target.id}`, async () => {
-                await client.request(`/api/v1/targets/${target.id}`, {
-                  method: "PUT",
-                  body: JSON.stringify({
-                    name,
-                    deployment: cleanDeploymentName(deployment),
-                    url: url.trim() || undefined,
-                    secret_id: secretId || null
-                  })
-                });
-                onClose();
-                return `Target "${name}" updated.`;
-              })
-            }
-          >
-            Save Target Changes
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EditJobModal({
-  job,
-  state,
-  client,
-  perform,
-  onClose
-}: {
-  job: any;
-  state: ServiceState;
-  client: ApiClient;
-  perform: Perform;
-  onClose: () => void;
-}) {
-  const [name, setName] = useState(job.name);
-  const [projectId, setProjectId] = useState(job.project_id);
-  const [targetId, setTargetId] = useState(job.target_id);
-  const [destinationId, setDestinationId] = useState(job.destination_id);
-  const [includeFileStorage, setIncludeFileStorage] = useState(job.include_file_storage);
-
-  const availableTargets = (state.targets ?? []).filter((t) => t.project_id === projectId);
-
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Edit Backup Job — {job.name}</h3>
-          <button type="button" className="close-btn" onClick={onClose}>✕</button>
-        </div>
-        <div className="modal-body stack">
-          <Field label="Job Name">
-            <input value={name} onChange={(e) => setName(e.target.value)} required />
-          </Field>
-          <Field label="Assigned Project">
-            <Select
-              value={projectId}
-              onChange={(val) => {
-                setProjectId(val);
-                const first = (state.targets ?? []).find((t) => t.project_id === val);
-                if (first) setTargetId(first.id);
-              }}
-              items={(state.projects ?? []).map((p) => [p.id, p.name])}
-              required
-            />
-          </Field>
-          <Field label="Convex Target Deployment (Filtered to Project)">
-            {availableTargets.length === 0 ? (
-              <div style={{ background: "#fef2f2", padding: "0.5rem", borderRadius: "6px", color: "#991b1b", fontSize: "0.82rem" }}>
-                ⚠️ No target connected to this project yet. Please create a target for this project first.
-              </div>
-            ) : (
-              <Select
-                value={targetId}
-                onChange={setTargetId}
-                items={availableTargets.map((t) => [t.id, `${t.name} (${t.deployment})`])}
-                required
-              />
-            )}
-          </Field>
-          <Field label="Storage Vault Destination">
-            <Select
-              value={destinationId}
-              onChange={setDestinationId}
-              items={(state.destinations ?? []).map((d) => [d.id, d.name])}
-              required
-            />
-          </Field>
-        </div>
-        <div className="modal-footer button-row">
-          <button type="button" className="secondary-button" onClick={onClose}>Cancel</button>
-          <button
-            type="button"
-            className="primary-button"
-            onClick={() =>
-              void perform(`update-job-${job.id}`, async () => {
-                await client.request(`/api/v1/jobs/${job.id}`, {
-                  method: "PUT",
-                  body: JSON.stringify({
-                    name,
-                    project_id: projectId,
-                    target_id: targetId,
-                    destination_id: destinationId,
-                    include_file_storage: includeFileStorage
-                  })
-                });
-                onClose();
-                return `Backup job "${name}" updated.`;
-              })
-            }
-          >
-            Save Job Changes
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }

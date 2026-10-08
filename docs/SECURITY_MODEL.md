@@ -43,7 +43,12 @@ Rules:
 
 ## Backup Encryption
 
-Backup archive encryption is optional per destination. When enabled, encryption must protect archive bytes before they leave the host for object storage or before they are considered complete on local storage.
+Backup archive encryption is optional per destination and implemented as [age](https://age-encryption.org) passphrase (scrypt) encryption. Archive bytes are encrypted in memory before they are written locally or uploaded, and stored as `.zip.age`.
+
+- The passphrase is stored in the encrypted secret vault, so scheduled backups, verification and restore need no interaction.
+- Changing a passphrase creates a new vault secret; older archives keep pointing at the secret they were written with. Secrets referenced by a destination cannot be deleted.
+- Without the app, any archive can be recovered with `age -d backup.zip.age > backup.zip` or `convex-autobackup decrypt backup.zip.age --out backup.zip` (passphrase from `CONVEX_AUTOBACKUP_PASSPHRASE` or stdin).
+- Manifests stay unencrypted and record the encryption mode, key reference, plaintext SHA-256 and stored SHA-256.
 
 Recovery requirements:
 

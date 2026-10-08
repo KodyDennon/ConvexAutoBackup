@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Clock3, FolderGit2, Play, RotateCcw, ShieldAlert } from "lucide-react";
-import { ApiClient, formatBytes, formatDateTime, sentenceCase, type ServiceState } from "../appState";
+import { ApiClient, formatBytes, formatDateTime, jobDestinationIds, sentenceCase, type ServiceState } from "../appState";
 import { EmptyRow, Field, PanelHeader, RunList, Select } from "../components/common";
 
 type Perform = (key: string, action: () => Promise<string | null | undefined>) => Promise<void>;
@@ -36,21 +36,23 @@ export function RunsSection({
       <section className="panel">
         <PanelHeader icon={<Play size={18} />} title="Backup Jobs & Target Deployments" detail={`${(state.jobs ?? []).length} configured job pipelines`} />
         <div className="table">
-          <div className="table-row table-head">
+          <div className="table-row table-head jobs-table-row">
             <span>Project</span>
             <span>Job Name</span>
             <span>Target Deployment</span>
-            <span>Destination Vault</span>
+            <span>Saves to</span>
             <span>File Storage</span>
             <span>Action</span>
           </div>
           {(state.jobs ?? []).map((job) => {
             const projObj = (state.projects ?? []).find((p) => p.id === job.project_id);
             const targetObj = (state.targets ?? []).find((t) => t.id === job.target_id);
-            const destObj = (state.destinations ?? []).find((d) => d.id === job.destination_id);
+            const jobDestinations = jobDestinationIds(job).map(
+              (id) => (state.destinations ?? []).find((d) => d.id === id)?.name ?? id.slice(0, 8)
+            );
 
             return (
-              <div className="table-row" key={job.id}>
+              <div className="table-row jobs-table-row" key={job.id}>
                 <span>
                   <strong style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", color: "#0369a1" }}>
                     <FolderGit2 size={14} /> {projObj?.name ?? "Default Project"}
@@ -58,7 +60,7 @@ export function RunsSection({
                 </span>
                 <span><strong>{job.name}</strong></span>
                 <span><code style={{ color: "#0284c7" }}>{targetObj?.deployment ?? job.target_id.slice(0, 8)}</code></span>
-                <span>{destObj?.name ?? job.destination_id.slice(0, 8)}</span>
+                <span>{jobDestinations.join(", ")}</span>
                 <span>
                   <span className={`badge ${job.include_file_storage ? "success" : "info"}`}>
                     {job.include_file_storage ? "Included" : "DB Only"}
@@ -90,7 +92,7 @@ export function RunsSection({
       <section className="split">
         <div className="panel">
           <PanelHeader icon={<Clock3 size={18} />} title="Backup Execution History" detail={`${(state.runs ?? []).length} total runs recorded`} />
-          <RunList runs={state.runs ?? []} jobs={state.jobs ?? []} />
+          <RunList runs={state.runs ?? []} jobs={state.jobs ?? []} destinations={state.destinations ?? []} />
         </div>
 
         <div className="panel" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>

@@ -1,4 +1,4 @@
-use super::{AuditEvent, DueJobSchedule, RunRecord};
+use super::{AuditEvent, DueJobSchedule, RunCopy, RunRecord};
 use crate::models::{
     BackupJob, ConvexTarget, ConvexTargetKind, EncryptionMode, JobStatus, Project, SecretRef,
     StorageDestination, StorageKind,
@@ -66,6 +66,7 @@ pub(super) fn job_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<BackupJo
         project_id: parse_uuid(row.get::<_, String>(1)?)?,
         target_id: parse_uuid(row.get::<_, String>(2)?)?,
         destination_id: parse_uuid(row.get::<_, String>(3)?)?,
+        additional_destination_ids: Vec::new(),
         name: row.get(4)?,
         include_file_storage: row.get(5)?,
         schedule_enabled: row.get(6)?,
@@ -94,6 +95,22 @@ pub(super) fn run_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RunRecor
             error: row.get(7)?,
         },
         manifest_json: row.get(6)?,
+    })
+}
+
+pub(super) fn run_copy_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RunCopy> {
+    let status: String = row.get(3)?;
+    Ok(RunCopy {
+        run_id: parse_uuid(row.get::<_, String>(0)?)?,
+        destination_id: parse_uuid(row.get::<_, String>(1)?)?,
+        position: row.get(2)?,
+        status: status_from_str(&status).map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(3, rusqlite::types::Type::Text, error.into())
+        })?,
+        storage_uri: row.get(4)?,
+        manifest_path: row.get(5)?,
+        manifest_json: row.get(6)?,
+        error: row.get(7)?,
     })
 }
 

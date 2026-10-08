@@ -90,6 +90,19 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: BackupCommand,
     },
+    /// Decrypt a passphrase-encrypted backup (.zip.age) to a plain .zip.
+    ///
+    /// Works offline, without the database. Reads the passphrase from the
+    /// environment variable named by --passphrase-env, or from stdin.
+    Decrypt {
+        /// Encrypted archive, e.g. downloaded from R2.
+        input: PathBuf,
+        /// Where to write the decrypted .zip.
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long, default_value = "CONVEX_AUTOBACKUP_PASSPHRASE")]
+        passphrase_env: String,
+    },
     /// Verify stored backup archives against manifests.
     Verify {
         #[arg(long)]
@@ -178,7 +191,9 @@ pub(crate) enum SecretCommand {
         label: String,
         #[arg(long, default_value = "convex_deploy_key")]
         kind: String,
-        #[arg(long)]
+        /// Secret value. Prefer the CONVEX_AUTOBACKUP_SECRET_VALUE environment
+        /// variable so the value never appears in process listings.
+        #[arg(long, env = "CONVEX_AUTOBACKUP_SECRET_VALUE", hide_env_values = true)]
         value: String,
         #[arg(long)]
         json: bool,
@@ -245,6 +260,9 @@ pub(crate) enum JobCommand {
         name: String,
         #[arg(long, default_value_t = true)]
         include_file_storage: bool,
+        /// Extra destination that receives a copy of each backup (repeatable).
+        #[arg(long)]
+        also_destination_id: Vec<Uuid>,
         #[arg(long)]
         json: bool,
     },

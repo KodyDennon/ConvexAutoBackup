@@ -63,10 +63,20 @@ select {
 code {
   background: #edf2ef;
   border: 1px solid #d7e0da;
-  border-radius: 7px;
+  border-radius: 5px;
   color: #14352d;
-  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.86em;
   overflow-wrap: anywhere;
+  padding: 0.08rem 0.35rem;
+}
+
+/* Block-level code (commands, paths shown on their own line). */
+.code-block,
+.command-grid code,
+.token-box code {
+  border-radius: 7px;
+  display: block;
   padding: 0.65rem 0.75rem;
 }
 

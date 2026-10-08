@@ -45,17 +45,13 @@ pub struct ApiTokenMetadata {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum Role {
+    #[default]
     Owner,
     Admin,
     Operator,
     Viewer,
-}
-
-impl Default for Role {
-    fn default() -> Self {
-        Role::Owner
-    }
 }
 
 impl Role {

@@ -1,3 +1,4 @@
+use crate::crypto::ArchiveEncryption;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -50,6 +51,18 @@ pub struct BackupManifest {
     pub storage_uri: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inventory: Option<BackupInventory>,
+    /// Destination this copy of the archive was written to (schema v2+).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub destination_id: Option<Uuid>,
+    /// Present when the stored object is encrypted; `sha256`/`archive_size_bytes`
+    /// always describe the plaintext zip.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encryption: Option<ArchiveEncryption>,
+    /// SHA-256 of the bytes actually stored (ciphertext when encrypted).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stored_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stored_size_bytes: Option<u64>,
 }
 
 impl BackupManifest {
@@ -57,7 +70,7 @@ impl BackupManifest {
         let sha256 = Sha256::digest(&input.archive_bytes);
         let inventory = parse_archive_inventory(&input.archive_bytes);
         Self {
-            schema_version: 1,
+            schema_version: 2,
             project_id: input.project_id,
             target_id: input.target_id,
             run_id: input.run_id,
@@ -71,7 +84,26 @@ impl BackupManifest {
             finished_at: input.finished_at,
             storage_uri: input.storage_uri,
             inventory,
+            destination_id: None,
+            encryption: None,
+            stored_sha256: None,
+            stored_size_bytes: None,
         }
+    }
+
+    /// Records how this copy was stored: destination, encryption and stored-bytes digest.
+    pub fn for_stored_copy(
+        &self,
+        destination_id: Uuid,
+        encryption: Option<ArchiveEncryption>,
+        stored_bytes: &[u8],
+    ) -> Self {
+        let mut copy = self.clone();
+        copy.destination_id = Some(destination_id);
+        copy.encryption = encryption;
+        copy.stored_sha256 = Some(format!("{:x}", Sha256::digest(stored_bytes)));
+        copy.stored_size_bytes = Some(stored_bytes.len() as u64);
+        copy
     }
 }
 
@@ -80,7 +112,8 @@ pub fn parse_archive_inventory(archive_bytes: &[u8]) -> Option<BackupInventory> 
     let cursor = std::io::Cursor::new(archive_bytes);
     let mut archive = zip::ZipArchive::new(cursor).ok()?;
 
-    let mut tables_map: std::collections::BTreeMap<String, (usize, u64)> = std::collections::BTreeMap::new();
+    let mut tables_map: std::collections::BTreeMap<String, (usize, u64)> =
+        std::collections::BTreeMap::new();
     let mut total_storage_files = 0;
     let mut storage_files_bytes = 0;
 
@@ -92,11 +125,13 @@ pub fn parse_archive_inventory(archive_bytes: &[u8]) -> Option<BackupInventory> 
         let name = file.name().to_string();
         let uncompressed_size = file.size();
 
-        if name.starts_with("_storage/") && !name.ends_with('/') {
-            if !name.ends_with("documents.jsonl") && !name.ends_with("generated_schema.jsonl") {
-                total_storage_files += 1;
-                storage_files_bytes += uncompressed_size;
-            }
+        if name.starts_with("_storage/")
+            && !name.ends_with('/')
+            && !name.ends_with("documents.jsonl")
+            && !name.ends_with("generated_schema.jsonl")
+        {
+            total_storage_files += 1;
+            storage_files_bytes += uncompressed_size;
         }
 
         if name.ends_with("/documents.jsonl") || name.ends_with(".jsonl") {
@@ -115,7 +150,9 @@ pub fn parse_archive_inventory(archive_bytes: &[u8]) -> Option<BackupInventory> 
             let mut contents = String::new();
             if file.read_to_string(&mut contents).is_ok() {
                 let doc_count = contents.lines().filter(|l| !l.trim().is_empty()).count();
-                let entry = tables_map.entry(raw_table_name.to_string()).or_insert((0, 0));
+                let entry = tables_map
+                    .entry(raw_table_name.to_string())
+                    .or_insert((0, 0));
                 entry.0 += doc_count;
                 entry.1 += uncompressed_size;
             }
@@ -133,7 +170,7 @@ pub fn parse_archive_inventory(archive_bytes: &[u8]) -> Option<BackupInventory> 
         });
     }
 
-    tables.sort_by(|a, b| b.document_count.cmp(&a.document_count));
+    tables.sort_by_key(|table| std::cmp::Reverse(table.document_count));
 
     Some(BackupInventory {
         total_tables: tables.len(),
@@ -176,12 +213,24 @@ mod tests {
             storage_uri: "file:///backups/prod.zip".to_string(),
         });
 
-        assert_eq!(manifest.schema_version, 1);
+        assert_eq!(manifest.schema_version, 2);
         assert_eq!(manifest.archive_size_bytes, 19);
         assert_eq!(manifest.duration_seconds, 120);
         assert_eq!(
             manifest.sha256,
             "f953a3e53e0ec7e939ccacc7fb7c0bf3b60874d2a954fe8aa07f1d418fee6f85"
         );
+    }
+
+    #[test]
+    fn schema_v1_manifest_still_parses() {
+        let v1 = r#"{"schema_version":1,"project_id":"01a00c07-41fd-75c0-b5ed-ff8693310ef7",
+            "target_id":"01a00c07-41fd-75c0-b5ed-ff8693310ef7","run_id":"01a00c07-41fd-75c0-b5ed-ff8693310ef7",
+            "deployment":"prod:x","convex_cli_version":"1","include_file_storage":true,
+            "archive_size_bytes":3,"sha256":"abc","started_at":"2026-07-01T10:00:00Z",
+            "finished_at":"2026-07-01T10:00:00Z","duration_seconds":0,"storage_uri":"file:///x.zip"}"#;
+        let manifest: BackupManifest = serde_json::from_str(v1).unwrap();
+        assert!(manifest.encryption.is_none());
+        assert!(manifest.stored_sha256.is_none());
     }
 }

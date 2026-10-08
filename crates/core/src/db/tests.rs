@@ -35,6 +35,7 @@ fn database_persists_project_destination_target_and_job() {
             destination_id: destination.id,
             name: "Nightly full backup".to_string(),
             include_file_storage: true,
+            additional_destination_ids: Vec::new(),
         })
         .unwrap();
 
@@ -85,6 +86,7 @@ fn database_persists_and_finds_due_schedules() {
             destination_id: destination.id,
             name: "Manual".to_string(),
             include_file_storage: true,
+            additional_destination_ids: Vec::new(),
         })
         .unwrap();
     let schedule = db

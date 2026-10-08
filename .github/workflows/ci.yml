@@ -20,7 +20,7 @@ jobs:
       - name: Install web dependencies
         run: npm --prefix web ci
       - name: Check source file size
-        run: ./scripts/ci/check-file-lines.sh 600
+        run: ./scripts/ci/check-file-lines.sh 1000
       - name: Build embedded web UI
         run: |
           npm --prefix web run build

@@ -1,4 +1,6 @@
+mod destinations;
 mod metadata;
+mod setup;
 #[cfg(test)]
 mod tests;
 
@@ -10,18 +12,24 @@ use axum::{
     routing::{delete, get, post},
 };
 use convex_autobackup_core::{
-    AppDatabase, AuthService, BackupEngine, BackupJob, CommandConvexExporter, CommandConvexImporter,
-    ConvexTarget, CreateCloudTarget, CreateJobSchedule, CreateLocalDestination, CreateProject,
-    CreateS3Destination, CreateScheduledJob, CreateUser, Error, Project, RestoreEngine, Result as AppResult,
-    Role, SchedulerService, SecretKind, SecretVault, User, default_data_dir, generate_dr_report,
-    list_secret_metadata, verify_run,
+    AppDatabase, AuthService, BackupEngine, BackupJob, CommandConvexExporter,
+    CommandConvexImporter, ConvexTarget, CreateCloudTarget, CreateJobSchedule,
+    CreateLocalDestination, CreateProject, CreateS3Destination, CreateScheduledJob, CreateUser,
+    EncryptionMode, Error, Project, RestoreEngine, Result as AppResult, Role, SchedulerService,
+    SecretKind, SecretRef, SecretVault, StorageDestination, User, crypto::validate_passphrase,
+    default_data_dir, generate_dr_report, list_secret_metadata, verify_run,
 };
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::Arc};
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::trace::TraceLayer;
 use uuid::Uuid;
 
+use destinations::{
+    apply_passphrase, create_local_destination, create_s3_destination, non_empty,
+    set_destination_encryption, test_destination,
+};
 use metadata::{capabilities, openapi_spec};
+use setup::{check_deploy_key, create_r2_preset_destination, setup_presets, system_checks};
 
 include!(concat!(env!("OUT_DIR"), "/web_assets.rs"));
 
@@ -77,15 +85,42 @@ pub fn router_with_state(state: AppState) -> Router {
         .route("/api/v1/secrets", get(list_secrets).post(put_secret))
         .route("/api/v1/secrets/{secret_id}", delete(delete_secret))
         .route("/api/v1/projects", get(list_projects).post(create_project))
-        .route("/api/v1/projects/{project_id}", delete(delete_project).put(update_project))
+        .route(
+            "/api/v1/projects/{project_id}",
+            delete(delete_project).put(update_project),
+        )
         .route("/api/v1/targets", get(list_targets))
         .route("/api/v1/targets/cloud", post(create_cloud_target))
-        .route("/api/v1/targets/{target_id}", delete(delete_target).put(update_target))
-        .route("/api/v1/targets/{target_id}/test", post(test_target_connection))
+        .route(
+            "/api/v1/targets/{target_id}",
+            delete(delete_target).put(update_target),
+        )
+        .route(
+            "/api/v1/targets/{target_id}/test",
+            post(test_target_connection),
+        )
+        .route("/api/v1/setup/check-deploy-key", post(check_deploy_key))
+        .route("/api/v1/setup/presets", get(setup_presets))
+        .route(
+            "/api/v1/setup/presets/r2",
+            post(create_r2_preset_destination),
+        )
+        .route("/api/v1/system/checks", get(system_checks))
         .route("/api/v1/destinations", get(list_destinations))
         .route("/api/v1/destinations/local", post(create_local_destination))
         .route("/api/v1/destinations/s3", post(create_s3_destination))
-        .route("/api/v1/destinations/{destination_id}", delete(delete_destination))
+        .route(
+            "/api/v1/destinations/{destination_id}",
+            delete(delete_destination),
+        )
+        .route(
+            "/api/v1/destinations/{destination_id}/encryption",
+            axum::routing::put(set_destination_encryption),
+        )
+        .route(
+            "/api/v1/destinations/{destination_id}/test",
+            post(test_destination),
+        )
         .route("/api/v1/jobs", get(list_jobs).post(create_job))
         .route("/api/v1/jobs/{job_id}", delete(delete_job).put(update_job))
         .route(
@@ -102,7 +137,6 @@ pub fn router_with_state(state: AppState) -> Router {
         .route("/api/v1/system/wipe", post(system_wipe))
         .route("/api/v1/jobs/{job_id}/run", post(run_job))
         .route("/api/v1/runs", get(list_runs))
-        .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
@@ -328,17 +362,6 @@ async fn list_targets(
     })))
 }
 
-async fn create_local_destination(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Json(input): Json<CreateLocalDestination>,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    require_role(&state, &headers, RoleRequirement::Manage)?;
-    Ok(Json(
-        serde_json::json!({ "destination": state.database.create_local_destination(input)? }),
-    ))
-}
-
 async fn list_destinations(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -347,17 +370,6 @@ async fn list_destinations(
     Ok(Json(serde_json::json!({
         "destinations": state.database.list_destinations()?
     })))
-}
-
-async fn create_s3_destination(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Json(input): Json<CreateS3Destination>,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    require_role(&state, &headers, RoleRequirement::Manage)?;
-    Ok(Json(
-        serde_json::json!({ "destination": state.database.create_s3_destination(input)? }),
-    ))
 }
 
 async fn list_jobs(
@@ -433,9 +445,18 @@ async fn list_runs(
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_role(&state, &headers, RoleRequirement::Authenticated)?;
-    Ok(Json(
-        serde_json::json!({ "runs": state.database.list_runs()? }),
-    ))
+    let runs = state
+        .database
+        .list_runs()?
+        .into_iter()
+        .map(|run| {
+            let copies = state.database.list_run_copies(run.run.id)?;
+            let mut value = serde_json::to_value(&run)?;
+            value["copies"] = serde_json::to_value(copies)?;
+            Ok(value)
+        })
+        .collect::<AppResult<Vec<_>>>()?;
+    Ok(Json(serde_json::json!({ "runs": runs })))
 }
 
 async fn verify_backup_run(
@@ -570,7 +591,9 @@ async fn delete_project(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_role(&state, &headers, RoleRequirement::Manage)?;
     state.database.delete_project(project_id)?;
-    Ok(Json(serde_json::json!({ "status": "ok", "deleted_id": project_id })))
+    Ok(Json(
+        serde_json::json!({ "status": "ok", "deleted_id": project_id }),
+    ))
 }
 
 async fn delete_target(
@@ -580,7 +603,9 @@ async fn delete_target(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_role(&state, &headers, RoleRequirement::Manage)?;
     state.database.delete_target(target_id)?;
-    Ok(Json(serde_json::json!({ "status": "ok", "deleted_id": target_id })))
+    Ok(Json(
+        serde_json::json!({ "status": "ok", "deleted_id": target_id }),
+    ))
 }
 
 async fn delete_destination(
@@ -590,7 +615,9 @@ async fn delete_destination(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_role(&state, &headers, RoleRequirement::Manage)?;
     state.database.delete_destination(destination_id)?;
-    Ok(Json(serde_json::json!({ "status": "ok", "deleted_id": destination_id })))
+    Ok(Json(
+        serde_json::json!({ "status": "ok", "deleted_id": destination_id }),
+    ))
 }
 
 async fn delete_job(
@@ -600,7 +627,9 @@ async fn delete_job(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_role(&state, &headers, RoleRequirement::Manage)?;
     state.database.delete_job(job_id)?;
-    Ok(Json(serde_json::json!({ "status": "ok", "deleted_id": job_id })))
+    Ok(Json(
+        serde_json::json!({ "status": "ok", "deleted_id": job_id }),
+    ))
 }
 
 async fn delete_schedule(
@@ -610,7 +639,9 @@ async fn delete_schedule(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_role(&state, &headers, RoleRequirement::Manage)?;
     state.database.delete_schedule(schedule_id)?;
-    Ok(Json(serde_json::json!({ "status": "ok", "deleted_id": schedule_id })))
+    Ok(Json(
+        serde_json::json!({ "status": "ok", "deleted_id": schedule_id }),
+    ))
 }
 
 async fn delete_secret(
@@ -619,8 +650,20 @@ async fn delete_secret(
     Path(secret_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_role(&state, &headers, RoleRequirement::Manage)?;
+    if state
+        .database
+        .encryption_key_refs_in_use()?
+        .contains(&secret_id)
+    {
+        return Err(Error::message(
+            "this passphrase is in use by a destination; change or disable that destination's encryption first",
+        )
+        .into());
+    }
     state.database.delete_secret(secret_id)?;
-    Ok(Json(serde_json::json!({ "status": "ok", "deleted_id": secret_id })))
+    Ok(Json(
+        serde_json::json!({ "status": "ok", "deleted_id": secret_id }),
+    ))
 }
 
 async fn test_target_connection(
@@ -630,12 +673,31 @@ async fn test_target_connection(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_role(&state, &headers, RoleRequirement::Authenticated)?;
     let target = state.database.get_target(target_id)?;
-    Ok(Json(serde_json::json!({
-        "status": "ok",
-        "target_id": target_id,
-        "deployment": target.deployment,
-        "message": format!("Target '{}' (deployment '{}') is configured and ready.", target.name, target.deployment)
-    })))
+    let deploy_key = SecretVault::from_env(state.database.clone())?
+        .get_secret(target.secret.id)
+        .or_else(|_| convex_autobackup_core::convex::resolve_deploy_key(&target))?;
+    if let Err(error) = convex_autobackup_core::convex::validate_deploy_key_matches_deployment(
+        &deploy_key,
+        &target.deployment,
+    ) {
+        return Ok(Json(
+            serde_json::json!({ "status": "error", "ok": false, "message": format!("{error:#}") }),
+        ));
+    }
+    let exporter = CommandConvexExporter::for_data_dir(&state.data_dir);
+    Ok(Json(match exporter.check_connection(&deploy_key).await {
+        Ok(check) => serde_json::json!({
+            "status": "ok",
+            "ok": true,
+            "target_id": target_id,
+            "deployment": target.deployment,
+            "table_count": check.tables.len(),
+            "message": format!("Connected to {} ({} tables visible).", target.deployment, check.tables.len())
+        }),
+        Err(error) => {
+            serde_json::json!({ "status": "error", "ok": false, "message": format!("{error:#}") })
+        }
+    }))
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -651,7 +713,10 @@ async fn update_project(
     Json(input): Json<UpdateProjectInput>,
 ) -> Result<Json<Project>, ApiError> {
     require_role(&state, &headers, RoleRequirement::Manage)?;
-    let updated = state.database.update_project(project_id, &input.name, input.description.as_deref())?;
+    let updated =
+        state
+            .database
+            .update_project(project_id, &input.name, input.description.as_deref())?;
     Ok(Json(updated))
 }
 
@@ -670,7 +735,13 @@ async fn update_target(
     Json(input): Json<UpdateTargetInput>,
 ) -> Result<Json<ConvexTarget>, ApiError> {
     require_role(&state, &headers, RoleRequirement::Manage)?;
-    let updated = state.database.update_target(target_id, &input.name, &input.deployment, input.url.as_deref(), input.secret_id)?;
+    let updated = state.database.update_target(
+        target_id,
+        &input.name,
+        &input.deployment,
+        input.url.as_deref(),
+        input.secret_id,
+    )?;
     Ok(Json(updated))
 }
 
@@ -679,15 +750,27 @@ async fn system_update(
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_role(&state, &headers, RoleRequirement::Manage)?;
-    let script_path = PathBuf::from("/home/user/projects/ConvexAutoBackup/scripts/update.sh");
-    if script_path.exists() {
-        tokio::spawn(async move {
-            let _ = tokio::process::Command::new("bash")
-                .arg(script_path)
-                .output()
-                .await;
-        });
+    if std::env::var_os("CONVEX_AUTOBACKUP_CONTAINER").is_some() {
+        return Ok(Json(serde_json::json!({
+            "status": "manual",
+            "message": "Running in Docker. Update from the host with scripts/docker-update.sh (rebuilds the image and restarts the containers; data is kept)."
+        })));
     }
+    let script_path = std::env::var_os("CONVEX_AUTOBACKUP_UPDATE_SCRIPT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/home/user/projects/ConvexAutoBackup/scripts/update.sh"));
+    if !script_path.exists() {
+        return Ok(Json(serde_json::json!({
+            "status": "unavailable",
+            "message": format!("Update script {} was not found.", script_path.display())
+        })));
+    }
+    tokio::spawn(async move {
+        let _ = tokio::process::Command::new("bash")
+            .arg(script_path)
+            .output()
+            .await;
+    });
     Ok(Json(serde_json::json!({
         "status": "updating",
         "message": "System update initiated. Rebuilding release workspace and restarting service..."
@@ -700,6 +783,8 @@ struct UpdateJobInput {
     project_id: Uuid,
     target_id: Uuid,
     destination_id: Uuid,
+    #[serde(default)]
+    additional_destination_ids: Vec<Uuid>,
     include_file_storage: bool,
 }
 
@@ -712,11 +797,14 @@ async fn update_job(
     require_role(&state, &headers, RoleRequirement::Manage)?;
     let updated = state.database.update_job(
         job_id,
-        &input.name,
-        input.project_id,
-        input.target_id,
-        input.destination_id,
-        input.include_file_storage,
+        &CreateScheduledJob {
+            project_id: input.project_id,
+            target_id: input.target_id,
+            destination_id: input.destination_id,
+            name: input.name,
+            include_file_storage: input.include_file_storage,
+            additional_destination_ids: input.additional_destination_ids,
+        },
     )?;
     Ok(Json(updated))
 }
@@ -746,7 +834,7 @@ async fn system_wipe(
 
 impl From<Error> for ApiError {
     fn from(error: Error) -> Self {
-        Self::bad_request(error.to_string())
+        Self::bad_request(format!("{error:#}"))
     }
 }
 

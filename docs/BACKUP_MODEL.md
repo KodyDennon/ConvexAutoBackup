@@ -61,7 +61,7 @@ S3-compatible destinations must:
 - Support retention listing by prefix.
 - Avoid provider-specific behavior in the shared storage contract.
 
-The current implementation stores S3-compatible backups through the Rust `object_store` S3 backend. Credentials are stored as encrypted JSON secrets with `access_key_id` and `secret_access_key` fields.
+The current implementation stores S3-compatible backups with a built-in SigV4 client (path-style URLs, so Cloudflare R2 works with `endpoint = https://<account>.r2.cloudflarestorage.com` and region `auto`). Retention, verification and restore all work against S3/R2. Credentials are stored as encrypted JSON secrets with `access_key_id` and `secret_access_key` fields.
 
 ## Retention
 

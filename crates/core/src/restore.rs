@@ -1,6 +1,7 @@
 use crate::convex::{ConvexImporter, ImportRequest, resolve_deploy_key};
 use crate::secrets::SecretVault;
-use crate::{AppDatabase, BackupManifest, ConvexTarget, VerificationResult, verify_run};
+use crate::verify::resolve_run_archive;
+use crate::{AppDatabase, ConvexTarget, VerificationResult, verify_run};
 use crate::{Result, ResultContext, error};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -52,14 +53,17 @@ impl RestoreEngine {
         if !verification.ok {
             return Err(error!("backup verification failed; restore blocked"));
         }
-        let run = self.database.get_run_record(run_id)?;
-        let manifest: BackupManifest = serde_json::from_str(
-            run.manifest_json
-                .as_deref()
-                .ok_or_else(|| error!("run {run_id} does not have a manifest"))?,
-        )
-        .context("stored manifest JSON is invalid")?;
-        let archive_path = file_uri_to_path(&manifest.storage_uri)?;
+        // Materialize the verified plaintext zip in staging so remote and encrypted
+        // copies restore the same way as local ones.
+        let resolved = resolve_run_archive(&self.database, run_id).await?;
+        // Fresh, owner-only directory per restore: never reuse a predictable /tmp path.
+        let staging_dir =
+            std::env::temp_dir().join(format!("convex-autobackup-restore-{}", Uuid::now_v7()));
+        create_private_dir(&staging_dir)?;
+        let staged = StagedDir(staging_dir.clone());
+        let archive_path = staging_dir.join(format!("{run_id}.zip"));
+        std::fs::write(&archive_path, &resolved.plaintext)
+            .with_context(|| format!("failed to write {}", archive_path.display()))?;
         let deploy_key = resolve_deploy_key_from_store(&self.database, &target)
             .or_else(|_| resolve_deploy_key(&target))?;
         crate::convex::validate_deploy_key_matches_deployment(&deploy_key, &target.deployment)?;
@@ -79,6 +83,7 @@ impl RestoreEngine {
             Some(run_id),
             &format!("restored backup to {}", target.deployment),
         )?;
+        drop(staged);
         Ok(RestoreResult {
             run_id,
             target_id,
@@ -94,10 +99,26 @@ fn resolve_deploy_key_from_store(database: &AppDatabase, target: &ConvexTarget) 
     SecretVault::from_env(database.clone())?.get_secret(target.secret.id)
 }
 
-fn file_uri_to_path(uri: &str) -> Result<PathBuf> {
-    uri.strip_prefix("file://")
-        .map(PathBuf::from)
-        .ok_or_else(|| error!("restore currently supports file:// archives"))
+/// Deletes the staged plaintext archive directory when dropped, including on error paths.
+struct StagedDir(PathBuf);
+
+impl Drop for StagedDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn create_private_dir(path: &std::path::Path) -> Result<()> {
+    let mut builder = std::fs::DirBuilder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    // `create` (not `create_all`) fails if the path already exists, e.g. a planted symlink.
+    builder
+        .create(path)
+        .with_context(|| format!("failed to create {}", path.display()))
 }
 
 #[cfg(test)]
@@ -172,6 +193,7 @@ mod tests {
                 destination_id: destination.id,
                 name: "Manual".to_string(),
                 include_file_storage: true,
+                additional_destination_ids: Vec::new(),
             })
             .unwrap();
         let backup = BackupEngine::new(db.clone(), dir.path().join("staging"))
@@ -182,13 +204,25 @@ mod tests {
 
         assert!(
             restore
-                .restore_run_to_target(backup.run_id, target.id, "wrong", REQUIRED_RESTORE_PHRASE, &FixtureImporter)
+                .restore_run_to_target(
+                    backup.run_id,
+                    target.id,
+                    "wrong",
+                    REQUIRED_RESTORE_PHRASE,
+                    &FixtureImporter
+                )
                 .await
                 .is_err()
         );
         assert!(
             restore
-                .restore_run_to_target(backup.run_id, target.id, "prod:careful-otter-123", "WRONG PHRASE", &FixtureImporter)
+                .restore_run_to_target(
+                    backup.run_id,
+                    target.id,
+                    "prod:careful-otter-123",
+                    "WRONG PHRASE",
+                    &FixtureImporter
+                )
                 .await
                 .is_err()
         );

@@ -14,7 +14,10 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use uuid::Uuid;
 
-use rows::{audit_from_row, missed_policy_to_str, run_from_row, schedule_from_row, status_to_str};
+use rows::{
+    audit_from_row, missed_policy_to_str, run_copy_from_row, run_from_row, schedule_from_row,
+    status_to_str,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CreateProject {
@@ -71,14 +74,33 @@ pub struct CreateScheduledJob {
     pub name: String,
     #[serde(default = "default_true")]
     pub include_file_storage: bool,
+    /// Extra destinations that receive a copy of the same export.
+    #[serde(default)]
+    pub additional_destination_ids: Vec<Uuid>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct JobBundle {
     pub project: Project,
     pub target: ConvexTarget,
+    /// Primary destination (same as `destinations[0]`).
     pub destination: StorageDestination,
+    /// All destinations, primary first.
+    pub destinations: Vec<StorageDestination>,
     pub job: BackupJob,
+}
+
+/// One stored copy of a run's archive in a single destination.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RunCopy {
+    pub run_id: Uuid,
+    pub destination_id: Uuid,
+    pub position: u32,
+    pub status: JobStatus,
+    pub storage_uri: Option<String>,
+    pub manifest_path: Option<String>,
+    pub manifest_json: Option<String>,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -240,6 +262,26 @@ impl AppDatabase {
                 enabled INTEGER NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS job_destinations (
+                job_id TEXT NOT NULL REFERENCES jobs(id),
+                destination_id TEXT NOT NULL REFERENCES destinations(id),
+                position INTEGER NOT NULL,
+                PRIMARY KEY (job_id, destination_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS run_copies (
+                run_id TEXT NOT NULL REFERENCES runs(id),
+                destination_id TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                storage_uri TEXT,
+                manifest_path TEXT,
+                manifest_json TEXT,
+                error TEXT,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (run_id, destination_id)
             );
 
             CREATE TABLE IF NOT EXISTS audit_events (
@@ -446,6 +488,50 @@ impl AppDatabase {
             error.as_deref().unwrap_or("backup run finished"),
         )?;
         Ok(())
+    }
+
+    pub fn record_run_copy(&self, copy: &RunCopy) -> Result<()> {
+        let connection = self.connection()?;
+        connection.execute(
+            "INSERT OR REPLACE INTO run_copies
+             (run_id, destination_id, position, status, storage_uri, manifest_path, manifest_json, error, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                copy.run_id.to_string(),
+                copy.destination_id.to_string(),
+                copy.position,
+                status_to_str(&copy.status),
+                copy.storage_uri,
+                copy.manifest_path,
+                copy.manifest_json,
+                copy.error,
+                Utc::now().to_rfc3339(),
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Stored copies of a run, in destination order (primary first).
+    pub fn list_run_copies(&self, run_id: Uuid) -> Result<Vec<RunCopy>> {
+        let connection = self.connection()?;
+        let mut statement = connection.prepare(
+            "SELECT run_id, destination_id, position, status, storage_uri, manifest_path, manifest_json, error
+             FROM run_copies WHERE run_id = ?1 ORDER BY position ASC",
+        )?;
+        let rows = statement.query_map(params![run_id.to_string()], run_copy_from_row)?;
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+    }
+
+    pub fn get_destination(&self, id: Uuid) -> Result<StorageDestination> {
+        let connection = self.connection()?;
+        connection
+            .query_row(
+                "SELECT id, team_id, name, kind_json, encryption_json, retention_json FROM destinations WHERE id = ?1",
+                params![id.to_string()],
+                rows::destination_from_row,
+            )
+            .optional()?
+            .ok_or_else(|| error!("destination {id} does not exist"))
     }
 
     pub fn record_audit(

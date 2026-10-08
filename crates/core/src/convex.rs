@@ -82,9 +82,10 @@ impl CommandConvexExporter {
                 work_dir: Some(runner_dir),
             };
         }
-        let mut exporter = Self::default();
-        exporter.work_dir = Some(runner_dir);
-        exporter
+        Self {
+            work_dir: Some(runner_dir),
+            ..Self::default()
+        }
     }
 
     fn from_program(program: String) -> Self {
@@ -141,9 +142,10 @@ impl CommandConvexImporter {
                 work_dir: Some(runner_dir),
             };
         }
-        let mut importer = Self::default();
-        importer.work_dir = Some(runner_dir);
-        importer
+        Self {
+            work_dir: Some(runner_dir),
+            ..Self::default()
+        }
     }
 
     fn from_program(program: String) -> Self {
@@ -160,11 +162,12 @@ impl CommandConvexImporter {
     }
 
     pub fn command_args(request: &ImportRequest, archive_path: &Path) -> Vec<String> {
+        // `convex import` takes the snapshot path positionally; `--yes` skips the
+        // interactive confirmation (the app enforces its own typed confirmation).
         let mut args = vec![
             "import".to_string(),
-            "--path".to_string(),
-            archive_path.to_string_lossy().to_string(),
             "--replace".to_string(),
+            "--yes".to_string(),
         ];
         match request.target.kind {
             ConvexTargetKind::Cloud => {
@@ -178,7 +181,58 @@ impl CommandConvexImporter {
                 }
             }
         }
+        args.push(archive_path.to_string_lossy().to_string());
         args
+    }
+}
+
+/// Result of a read-only connectivity check against a Convex deployment.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct ConnectionCheck {
+    pub deployment: Option<String>,
+    pub tables: Vec<String>,
+}
+
+impl CommandConvexExporter {
+    /// Proves a deploy key works by listing the deployment's tables (`convex data`).
+    /// Read-only: no documents are read and nothing is written.
+    pub async fn check_connection(&self, deploy_key: &str) -> Result<ConnectionCheck> {
+        let mut command = Command::new(&self.program);
+        if let Some(work_dir) = &self.work_dir
+            && work_dir.is_dir()
+        {
+            command.current_dir(work_dir);
+        }
+        command.args(&self.prefix_args);
+        command.args(["data", "--format", "jsonLines"]);
+        command.env("CONVEX_DEPLOY_KEY", deploy_key);
+        command.env("PATH", build_enhanced_path());
+        command.kill_on_drop(true);
+        let output = tokio::time::timeout(std::time::Duration::from_secs(90), command.output())
+            .await
+            .map_err(|_| error!("timed out after 90s contacting Convex"))?
+            .with_context(|| format!("failed to execute {}", self.program))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let message = stderr
+                .lines()
+                .map(str::trim)
+                .find(|line| !line.is_empty())
+                .unwrap_or("unknown error")
+                .trim_start_matches('✖')
+                .trim();
+            return Err(error!("Convex rejected the connection: {message}"));
+        }
+        let tables = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(str::to_string)
+            .collect();
+        Ok(ConnectionCheck {
+            deployment: extract_deployment_name_from_deploy_key(deploy_key),
+            tables,
+        })
     }
 }
 
@@ -191,10 +245,10 @@ impl ConvexExporter for CommandConvexExporter {
         Box::pin(async move {
             let args = Self::command_args(&request, output_path);
             let mut command = Command::new(&self.program);
-            if let Some(work_dir) = &self.work_dir {
-                if work_dir.is_dir() {
-                    command.current_dir(work_dir);
-                }
+            if let Some(work_dir) = &self.work_dir
+                && work_dir.is_dir()
+            {
+                command.current_dir(work_dir);
             }
             command.args(&self.prefix_args);
             command.args(&args);
@@ -227,10 +281,10 @@ impl ConvexImporter for CommandConvexImporter {
         Box::pin(async move {
             let args = Self::command_args(&request, archive_path);
             let mut command = Command::new(&self.program);
-            if let Some(work_dir) = &self.work_dir {
-                if work_dir.is_dir() {
-                    command.current_dir(work_dir);
-                }
+            if let Some(work_dir) = &self.work_dir
+                && work_dir.is_dir()
+            {
+                command.current_dir(work_dir);
             }
             command.args(&self.prefix_args);
             command.args(&args);
@@ -264,15 +318,15 @@ fn build_enhanced_path() -> String {
 
     if let Ok(home) = std::env::var("HOME") {
         let nvm_node_dir = std::path::Path::new(&home).join(".nvm/versions/node");
-        if nvm_node_dir.is_dir() {
-            if let Ok(entries) = std::fs::read_dir(&nvm_node_dir) {
-                for entry in entries.flatten() {
-                    let bin_dir = entry.path().join("bin");
-                    if bin_dir.join("node").is_file() {
-                        let bin_str = bin_dir.display().to_string();
-                        if !paths.contains(&bin_str) {
-                            paths.insert(0, bin_str);
-                        }
+        if nvm_node_dir.is_dir()
+            && let Ok(entries) = std::fs::read_dir(&nvm_node_dir)
+        {
+            for entry in entries.flatten() {
+                let bin_dir = entry.path().join("bin");
+                if bin_dir.join("node").is_file() {
+                    let bin_str = bin_dir.display().to_string();
+                    if !paths.contains(&bin_str) {
+                        paths.insert(0, bin_str);
                     }
                 }
             }
@@ -326,10 +380,19 @@ pub fn extract_deployment_name_from_deploy_key(key: &str) -> Option<String> {
     }
 }
 
-pub fn validate_deploy_key_matches_deployment(deploy_key: &str, target_deployment: &str) -> Result<()> {
-    let target_clean = target_deployment.trim().trim_start_matches("prod:").trim_start_matches("dev:");
+pub fn validate_deploy_key_matches_deployment(
+    deploy_key: &str,
+    target_deployment: &str,
+) -> Result<()> {
+    let target_clean = target_deployment
+        .trim()
+        .trim_start_matches("prod:")
+        .trim_start_matches("dev:");
     if let Some(key_deployment) = extract_deployment_name_from_deploy_key(deploy_key) {
-        let key_clean = key_deployment.trim().trim_start_matches("prod:").trim_start_matches("dev:");
+        let key_clean = key_deployment
+            .trim()
+            .trim_start_matches("prod:")
+            .trim_start_matches("dev:");
         if key_clean != target_clean && !key_clean.is_empty() && !target_clean.is_empty() {
             return Err(error!(
                 "Deploy Key Mismatch Error: The provided Deploy Key is issued for deployment '{key_clean}', but target is configured for '{target_clean}'. Execution aborted to prevent cross-deployment data contamination.",
@@ -401,11 +464,11 @@ mod tests {
             args,
             vec![
                 "import",
-                "--path",
-                "/tmp/in.zip",
                 "--replace",
+                "--yes",
                 "--deployment-name",
-                "prod:careful-otter-123"
+                "prod:careful-otter-123",
+                "/tmp/in.zip"
             ]
         );
     }

@@ -56,7 +56,10 @@ impl AppDatabase {
 
     pub fn create_cloud_target(&self, input: CreateCloudTarget) -> Result<ConvexTarget> {
         require_non_empty("target name", &input.name)?;
-        let sanitized_deployment = input.deployment.trim().replace(|c: char| !c.is_ascii_alphanumeric() && c != '-' && c != '_' && c != ':', "");
+        let sanitized_deployment = input.deployment.trim().replace(
+            |c: char| !c.is_ascii_alphanumeric() && c != '-' && c != '_' && c != ':',
+            "",
+        );
         require_non_empty("deployment", &sanitized_deployment)?;
         if input.deploy_key_env.is_none() && input.deploy_key_secret_id.is_none() {
             return Err(error!("deploy_key_env or deploy_key_secret_id is required"));
@@ -187,11 +190,16 @@ impl AppDatabase {
         self.require_project(input.project_id)?;
         self.require_target(input.target_id)?;
         self.require_destination(input.destination_id)?;
+        let additional_destination_ids = self.validated_additional_destinations(
+            input.destination_id,
+            &input.additional_destination_ids,
+        )?;
         let job = BackupJob {
             id: Uuid::now_v7(),
             project_id: input.project_id,
             target_id: input.target_id,
             destination_id: input.destination_id,
+            additional_destination_ids,
             name: input.name,
             include_file_storage: input.include_file_storage,
             schedule_enabled: true,
@@ -210,6 +218,7 @@ impl AppDatabase {
                 job.schedule_enabled
             ],
         )?;
+        self.replace_job_destinations(job.id, &job.additional_destination_ids)?;
         self.record_audit(
             "system",
             "job.create",
@@ -227,7 +236,11 @@ impl AppDatabase {
              FROM jobs ORDER BY name ASC",
         )?;
         let rows = statement.query_map([], job_from_row)?;
-        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+        let mut jobs = rows.collect::<std::result::Result<Vec<_>, _>>()?;
+        for job in &mut jobs {
+            job.additional_destination_ids = self.load_job_destinations(job.id)?;
+        }
+        Ok(jobs)
     }
 
     pub fn get_job_bundle(&self, job_id: Uuid) -> Result<JobBundle> {
@@ -243,11 +256,12 @@ impl AppDatabase {
             params![job.target_id.to_string()],
             target_from_row,
         )?;
-        let destination = connection.query_row(
-            "SELECT id, team_id, name, kind_json, encryption_json, retention_json FROM destinations WHERE id = ?1",
-            params![job.destination_id.to_string()],
-            destination_from_row,
-        )?;
+        let destinations = job
+            .all_destination_ids()
+            .into_iter()
+            .map(|id| self.get_destination(id))
+            .collect::<Result<Vec<_>>>()?;
+        let destination = destinations[0].clone();
         if target.project_id != job.project_id {
             return Err(error!(
                 "Safety assertion error: Job project ID ({}) does not match Target project ID ({}). Job execution aborted.",
@@ -259,6 +273,7 @@ impl AppDatabase {
             project,
             target,
             destination,
+            destinations,
             job,
         })
     }
@@ -277,7 +292,7 @@ impl AppDatabase {
 
     fn get_job(&self, job_id: Uuid) -> Result<BackupJob> {
         let connection = self.connection()?;
-        connection
+        let mut job = connection
             .query_row(
                 "SELECT id, project_id, target_id, destination_id, name, include_file_storage, schedule_enabled
                  FROM jobs WHERE id = ?1",
@@ -285,7 +300,94 @@ impl AppDatabase {
                 job_from_row,
             )
             .optional()?
-            .ok_or_else(|| error!("job {job_id} does not exist"))
+            .ok_or_else(|| error!("job {job_id} does not exist"))?;
+        job.additional_destination_ids = self.load_job_destinations(job_id)?;
+        Ok(job)
+    }
+
+    fn load_job_destinations(&self, job_id: Uuid) -> Result<Vec<Uuid>> {
+        let connection = self.connection()?;
+        let mut statement = connection.prepare(
+            "SELECT destination_id FROM job_destinations WHERE job_id = ?1 ORDER BY position ASC",
+        )?;
+        let rows =
+            statement.query_map(params![job_id.to_string()], |row| row.get::<_, String>(0))?;
+        rows.map(|id| Uuid::parse_str(&id?).context("stored destination id is not a UUID"))
+            .collect()
+    }
+
+    fn validated_additional_destinations(&self, primary: Uuid, ids: &[Uuid]) -> Result<Vec<Uuid>> {
+        let mut unique = Vec::new();
+        for id in ids {
+            if *id == primary || unique.contains(id) {
+                continue;
+            }
+            self.require_destination(*id)?;
+            unique.push(*id);
+        }
+        Ok(unique)
+    }
+
+    fn replace_job_destinations(&self, job_id: Uuid, ids: &[Uuid]) -> Result<()> {
+        let connection = self.connection()?;
+        connection.execute(
+            "DELETE FROM job_destinations WHERE job_id = ?1",
+            params![job_id.to_string()],
+        )?;
+        for (index, id) in ids.iter().enumerate() {
+            connection.execute(
+                "INSERT INTO job_destinations (job_id, destination_id, position) VALUES (?1, ?2, ?3)",
+                params![job_id.to_string(), id.to_string(), (index + 1) as i64],
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Sets a destination's archive encryption. Existing archives keep the key they were written with.
+    pub fn set_destination_encryption(
+        &self,
+        id: Uuid,
+        encryption: &EncryptionMode,
+    ) -> Result<StorageDestination> {
+        if let EncryptionMode::Passphrase { key_ref } = encryption {
+            self.require_secret(key_ref.id)?;
+        }
+        let connection = self.connection()?;
+        let count = connection.execute(
+            "UPDATE destinations SET encryption_json = ?1 WHERE id = ?2",
+            params![
+                serde_json::to_string(encryption)
+                    .context("destination encryption serialization failed")?,
+                id.to_string()
+            ],
+        )?;
+        if count == 0 {
+            return Err(error!("destination {id} does not exist"));
+        }
+        self.record_audit(
+            "system",
+            "destination.encryption",
+            "destination",
+            Some(id),
+            if encryption.is_enabled() {
+                "enabled archive encryption"
+            } else {
+                "disabled archive encryption"
+            },
+        )?;
+        self.get_destination(id)
+    }
+
+    /// Secret ids referenced by any destination's encryption setting.
+    pub fn encryption_key_refs_in_use(&self) -> Result<Vec<Uuid>> {
+        Ok(self
+            .list_destinations()?
+            .into_iter()
+            .filter_map(|destination| match destination.encryption {
+                EncryptionMode::Passphrase { key_ref } => Some(key_ref.id),
+                _ => None,
+            })
+            .collect())
     }
 
     fn insert_destination(
@@ -320,77 +422,188 @@ impl AppDatabase {
 
     pub fn delete_project(&self, id: Uuid) -> Result<()> {
         let connection = self.connection()?;
-        connection.execute("DELETE FROM runs WHERE job_id IN (SELECT id FROM jobs WHERE project_id = ?1)", params![id.to_string()])?;
-        connection.execute("DELETE FROM schedules WHERE job_id IN (SELECT id FROM jobs WHERE project_id = ?1)", params![id.to_string()])?;
-        connection.execute("DELETE FROM jobs WHERE project_id = ?1", params![id.to_string()])?;
-        connection.execute("DELETE FROM targets WHERE project_id = ?1", params![id.to_string()])?;
-        let count = connection.execute("DELETE FROM projects WHERE id = ?1", params![id.to_string()])?;
+        connection.execute("DELETE FROM run_copies WHERE run_id IN (SELECT r.id FROM runs r JOIN jobs j ON r.job_id = j.id WHERE j.project_id = ?1)", params![id.to_string()])?;
+        connection.execute("DELETE FROM job_destinations WHERE job_id IN (SELECT id FROM jobs WHERE project_id = ?1)", params![id.to_string()])?;
+        connection.execute(
+            "DELETE FROM runs WHERE job_id IN (SELECT id FROM jobs WHERE project_id = ?1)",
+            params![id.to_string()],
+        )?;
+        connection.execute(
+            "DELETE FROM schedules WHERE job_id IN (SELECT id FROM jobs WHERE project_id = ?1)",
+            params![id.to_string()],
+        )?;
+        connection.execute(
+            "DELETE FROM jobs WHERE project_id = ?1",
+            params![id.to_string()],
+        )?;
+        connection.execute(
+            "DELETE FROM targets WHERE project_id = ?1",
+            params![id.to_string()],
+        )?;
+        let count = connection.execute(
+            "DELETE FROM projects WHERE id = ?1",
+            params![id.to_string()],
+        )?;
         if count == 0 {
             return Err(error!("project {id} does not exist"));
         }
-        self.record_audit("system", "project.delete", "project", Some(id), "deleted project and associated targets/jobs/runs")?;
+        self.record_audit(
+            "system",
+            "project.delete",
+            "project",
+            Some(id),
+            "deleted project and associated targets/jobs/runs",
+        )?;
         Ok(())
     }
 
     pub fn delete_target(&self, id: Uuid) -> Result<()> {
         let connection = self.connection()?;
-        connection.execute("DELETE FROM runs WHERE job_id IN (SELECT id FROM jobs WHERE target_id = ?1)", params![id.to_string()])?;
-        connection.execute("DELETE FROM schedules WHERE job_id IN (SELECT id FROM jobs WHERE target_id = ?1)", params![id.to_string()])?;
-        connection.execute("DELETE FROM jobs WHERE target_id = ?1", params![id.to_string()])?;
-        let count = connection.execute("DELETE FROM targets WHERE id = ?1", params![id.to_string()])?;
+        connection.execute("DELETE FROM run_copies WHERE run_id IN (SELECT r.id FROM runs r JOIN jobs j ON r.job_id = j.id WHERE j.target_id = ?1)", params![id.to_string()])?;
+        connection.execute("DELETE FROM job_destinations WHERE job_id IN (SELECT id FROM jobs WHERE target_id = ?1)", params![id.to_string()])?;
+        connection.execute(
+            "DELETE FROM runs WHERE job_id IN (SELECT id FROM jobs WHERE target_id = ?1)",
+            params![id.to_string()],
+        )?;
+        connection.execute(
+            "DELETE FROM schedules WHERE job_id IN (SELECT id FROM jobs WHERE target_id = ?1)",
+            params![id.to_string()],
+        )?;
+        connection.execute(
+            "DELETE FROM jobs WHERE target_id = ?1",
+            params![id.to_string()],
+        )?;
+        let count =
+            connection.execute("DELETE FROM targets WHERE id = ?1", params![id.to_string()])?;
         if count == 0 {
             return Err(error!("target {id} does not exist"));
         }
-        self.record_audit("system", "target.delete", "target", Some(id), "deleted target and associated jobs/runs")?;
+        self.record_audit(
+            "system",
+            "target.delete",
+            "target",
+            Some(id),
+            "deleted target and associated jobs/runs",
+        )?;
         Ok(())
     }
 
     pub fn delete_destination(&self, id: Uuid) -> Result<()> {
         let connection = self.connection()?;
-        connection.execute("DELETE FROM runs WHERE job_id IN (SELECT id FROM jobs WHERE destination_id = ?1)", params![id.to_string()])?;
-        connection.execute("DELETE FROM schedules WHERE job_id IN (SELECT id FROM jobs WHERE destination_id = ?1)", params![id.to_string()])?;
-        connection.execute("DELETE FROM jobs WHERE destination_id = ?1", params![id.to_string()])?;
-        let count = connection.execute("DELETE FROM destinations WHERE id = ?1", params![id.to_string()])?;
+        connection.execute(
+            "DELETE FROM job_destinations WHERE destination_id = ?1",
+            params![id.to_string()],
+        )?;
+        connection.execute(
+            "DELETE FROM run_copies WHERE destination_id = ?1",
+            params![id.to_string()],
+        )?;
+        connection.execute("DELETE FROM run_copies WHERE run_id IN (SELECT r.id FROM runs r JOIN jobs j ON r.job_id = j.id WHERE j.destination_id = ?1)", params![id.to_string()])?;
+        connection.execute("DELETE FROM job_destinations WHERE job_id IN (SELECT id FROM jobs WHERE destination_id = ?1)", params![id.to_string()])?;
+        connection.execute(
+            "DELETE FROM runs WHERE job_id IN (SELECT id FROM jobs WHERE destination_id = ?1)",
+            params![id.to_string()],
+        )?;
+        connection.execute(
+            "DELETE FROM schedules WHERE job_id IN (SELECT id FROM jobs WHERE destination_id = ?1)",
+            params![id.to_string()],
+        )?;
+        connection.execute(
+            "DELETE FROM jobs WHERE destination_id = ?1",
+            params![id.to_string()],
+        )?;
+        let count = connection.execute(
+            "DELETE FROM destinations WHERE id = ?1",
+            params![id.to_string()],
+        )?;
         if count == 0 {
             return Err(error!("destination {id} does not exist"));
         }
-        self.record_audit("system", "destination.delete", "destination", Some(id), "deleted destination and associated jobs/runs")?;
+        self.record_audit(
+            "system",
+            "destination.delete",
+            "destination",
+            Some(id),
+            "deleted destination and associated jobs/runs",
+        )?;
         Ok(())
     }
 
     pub fn delete_job(&self, id: Uuid) -> Result<()> {
         let connection = self.connection()?;
-        connection.execute("DELETE FROM runs WHERE job_id = ?1", params![id.to_string()])?;
-        connection.execute("DELETE FROM schedules WHERE job_id = ?1", params![id.to_string()])?;
-        let count = connection.execute("DELETE FROM jobs WHERE id = ?1", params![id.to_string()])?;
+        connection.execute(
+            "DELETE FROM run_copies WHERE run_id IN (SELECT id FROM runs WHERE job_id = ?1)",
+            params![id.to_string()],
+        )?;
+        connection.execute(
+            "DELETE FROM job_destinations WHERE job_id = ?1",
+            params![id.to_string()],
+        )?;
+        connection.execute(
+            "DELETE FROM runs WHERE job_id = ?1",
+            params![id.to_string()],
+        )?;
+        connection.execute(
+            "DELETE FROM schedules WHERE job_id = ?1",
+            params![id.to_string()],
+        )?;
+        let count =
+            connection.execute("DELETE FROM jobs WHERE id = ?1", params![id.to_string()])?;
         if count == 0 {
             return Err(error!("job {id} does not exist"));
         }
-        self.record_audit("system", "job.delete", "job", Some(id), "deleted backup job and associated runs/schedules")?;
+        self.record_audit(
+            "system",
+            "job.delete",
+            "job",
+            Some(id),
+            "deleted backup job and associated runs/schedules",
+        )?;
         Ok(())
     }
 
     pub fn delete_schedule(&self, id: Uuid) -> Result<()> {
         let connection = self.connection()?;
-        let count = connection.execute("DELETE FROM schedules WHERE id = ?1", params![id.to_string()])?;
+        let count = connection.execute(
+            "DELETE FROM schedules WHERE id = ?1",
+            params![id.to_string()],
+        )?;
         if count == 0 {
             return Err(error!("schedule {id} does not exist"));
         }
-        self.record_audit("system", "schedule.delete", "schedule", Some(id), "deleted schedule")?;
+        self.record_audit(
+            "system",
+            "schedule.delete",
+            "schedule",
+            Some(id),
+            "deleted schedule",
+        )?;
         Ok(())
     }
 
     pub fn delete_secret(&self, id: Uuid) -> Result<()> {
         let connection = self.connection()?;
-        let count = connection.execute("DELETE FROM secrets WHERE id = ?1", params![id.to_string()])?;
+        let count =
+            connection.execute("DELETE FROM secrets WHERE id = ?1", params![id.to_string()])?;
         if count == 0 {
             return Err(error!("secret {id} does not exist"));
         }
-        self.record_audit("system", "secret.delete", "secret", Some(id), "deleted secret")?;
+        self.record_audit(
+            "system",
+            "secret.delete",
+            "secret",
+            Some(id),
+            "deleted secret",
+        )?;
         Ok(())
     }
 
-    pub fn update_project(&self, id: Uuid, name: &str, description: Option<&str>) -> Result<Project> {
+    pub fn update_project(
+        &self,
+        id: Uuid,
+        name: &str,
+        description: Option<&str>,
+    ) -> Result<Project> {
         require_non_empty("project name", name)?;
         let connection = self.connection()?;
         let count = connection.execute(
@@ -400,7 +613,13 @@ impl AppDatabase {
         if count == 0 {
             return Err(error!("project {id} does not exist"));
         }
-        self.record_audit("system", "project.update", "project", Some(id), &format!("updated project {name}"))?;
+        self.record_audit(
+            "system",
+            "project.update",
+            "project",
+            Some(id),
+            &format!("updated project {name}"),
+        )?;
         let project = connection.query_row(
             "SELECT id, team_id, name, description, created_at FROM projects WHERE id = ?1",
             params![id.to_string()],
@@ -409,9 +628,19 @@ impl AppDatabase {
         Ok(project)
     }
 
-    pub fn update_target(&self, id: Uuid, name: &str, deployment: &str, url: Option<&str>, secret_id: Option<Uuid>) -> Result<ConvexTarget> {
+    pub fn update_target(
+        &self,
+        id: Uuid,
+        name: &str,
+        deployment: &str,
+        url: Option<&str>,
+        secret_id: Option<Uuid>,
+    ) -> Result<ConvexTarget> {
         require_non_empty("target name", name)?;
-        let sanitized_deployment = deployment.trim().replace(|c: char| !c.is_ascii_alphanumeric() && c != '-' && c != '_' && c != ':', "");
+        let sanitized_deployment = deployment.trim().replace(
+            |c: char| !c.is_ascii_alphanumeric() && c != '-' && c != '_' && c != ':',
+            "",
+        );
         require_non_empty("deployment", &sanitized_deployment)?;
         let connection = self.connection()?;
 
@@ -428,19 +657,26 @@ impl AppDatabase {
             )?;
         }
 
-        self.record_audit("system", "target.update", "target", Some(id), &format!("updated target {name}"))?;
+        self.record_audit(
+            "system",
+            "target.update",
+            "target",
+            Some(id),
+            &format!("updated target {name}"),
+        )?;
         self.get_target(id)
     }
 
-    pub fn update_job(
-        &self,
-        id: Uuid,
-        name: &str,
-        project_id: Uuid,
-        target_id: Uuid,
-        destination_id: Uuid,
-        include_file_storage: bool,
-    ) -> Result<BackupJob> {
+    /// Replaces a job's settings; `input` has the same shape as job creation.
+    pub fn update_job(&self, id: Uuid, input: &CreateScheduledJob) -> Result<BackupJob> {
+        let CreateScheduledJob {
+            project_id,
+            target_id,
+            destination_id,
+            ref name,
+            include_file_storage,
+            ref additional_destination_ids,
+        } = *input;
         require_non_empty("job name", name)?;
         self.require_project(project_id)?;
         let target = self.get_target(target_id)?;
@@ -451,6 +687,8 @@ impl AppDatabase {
             ));
         }
         self.require_destination(destination_id)?;
+        let additional_destination_ids =
+            self.validated_additional_destinations(destination_id, additional_destination_ids)?;
 
         let connection = self.connection()?;
         connection.execute(
@@ -465,12 +703,29 @@ impl AppDatabase {
             ],
         )?;
 
-        self.record_audit("system", "job.update", "job", Some(id), &format!("updated job {name}"))?;
+        self.replace_job_destinations(id, &additional_destination_ids)?;
+        self.record_audit(
+            "system",
+            "job.update",
+            "job",
+            Some(id),
+            &format!("updated job {name}"),
+        )?;
         self.get_job(id)
     }
 
     pub fn factory_reset(&self, wipe_files: bool) -> Result<()> {
+        let local_roots = self
+            .list_destinations()?
+            .into_iter()
+            .filter_map(|destination| match destination.kind {
+                StorageKind::LocalFilesystem { root } => Some(root),
+                StorageKind::S3Compatible { .. } => None,
+            })
+            .collect::<Vec<_>>();
         let connection = self.connection()?;
+        connection.execute("DELETE FROM run_copies", [])?;
+        connection.execute("DELETE FROM job_destinations", [])?;
         connection.execute("DELETE FROM runs", [])?;
         connection.execute("DELETE FROM schedules", [])?;
         connection.execute("DELETE FROM jobs", [])?;
@@ -483,10 +738,8 @@ impl AppDatabase {
         connection.execute("DELETE FROM users", [])?;
 
         if wipe_files {
-            let default_vault = std::path::Path::new("/home/user/backups");
-            if default_vault.exists() {
-                let _ = std::fs::remove_dir_all(default_vault);
-                let _ = std::fs::create_dir_all(default_vault);
+            for root in &local_roots {
+                remove_backup_files(std::path::Path::new(root));
             }
         }
 
@@ -498,6 +751,31 @@ impl AppDatabase {
             "performed full system factory reset and wiped all database records and local archives",
         )?;
         Ok(())
+    }
+}
+
+/// Deletes only backup archives and manifests under `dir`, leaving anything else alone.
+fn remove_backup_files(dir: &std::path::Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_dir() {
+            remove_backup_files(&path);
+            let _ = std::fs::remove_dir(&path);
+        } else if file_type.is_file() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.ends_with(".zip")
+                || name.ends_with(".zip.age")
+                || name.ends_with(".manifest.json")
+            {
+                let _ = std::fs::remove_file(&path);
+            }
+        }
     }
 }
 

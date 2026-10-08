@@ -1,15 +1,60 @@
+# ConvexAutoBackup with an optional Cloudflare Tunnel sidecar.
+#
+#   Local only:          docker compose up -d --build
+#   With public tunnel:  docker compose --profile tunnel up -d --build
+#
+# Secrets are read from ./.env or `--env-file <file>`: CONVEX_AUTOBACKUP_MASTER_KEY
+# and, for the tunnel profile, TUNNEL_TOKEN. Each container only receives the
+# variables it needs.
+name: convex-autobackup
+
+x-hardening: &hardening
+  read_only: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
 services:
-  convex-autobackup:
+  app:
+    <<: *hardening
     build: .
     image: convex-autobackup:local
-    ports:
-      - "8976:8976"
+    container_name: convex-autobackup
     environment:
-      CONVEX_AUTOBACKUP_BIND: 0.0.0.0:8976
       CONVEX_AUTOBACKUP_MASTER_KEY: ${CONVEX_AUTOBACKUP_MASTER_KEY:?set CONVEX_AUTOBACKUP_MASTER_KEY}
-      RUST_LOG: info
+      CONVEX_AUTOBACKUP_BIND: 0.0.0.0:8976
+      RUST_LOG: ${RUST_LOG:-info}
+      # Optional pre-provisioned Cloudflare R2 bucket offered by the setup wizard.
+      CONVEX_AUTOBACKUP_PRESET_R2_BUCKET: ${CONVEX_AUTOBACKUP_PRESET_R2_BUCKET:-}
+      CONVEX_AUTOBACKUP_PRESET_R2_ENDPOINT: ${CONVEX_AUTOBACKUP_PRESET_R2_ENDPOINT:-}
+      CONVEX_AUTOBACKUP_PRESET_R2_ACCESS_KEY_ID: ${CONVEX_AUTOBACKUP_PRESET_R2_ACCESS_KEY_ID:-}
+      CONVEX_AUTOBACKUP_PRESET_R2_SECRET_ACCESS_KEY: ${CONVEX_AUTOBACKUP_PRESET_R2_SECRET_ACCESS_KEY:-}
+    # Published on the host loopback only; remote access goes through the tunnel.
+    ports:
+      - "127.0.0.1:${CONVEX_AUTOBACKUP_PORT:-8976}:8976"
     volumes:
-      - convex-autobackup-data:/data
+      - data:/data
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+
+  cloudflared:
+    <<: *hardening
+    profiles: ["tunnel"]
+    image: cloudflare/cloudflared:2026.9.3
+    container_name: convex-autobackup-tunnel
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    depends_on:
+      app:
+        condition: service_healthy
 
 volumes:
-  convex-autobackup-data:
+  data:

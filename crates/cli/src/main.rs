@@ -7,8 +7,8 @@ use convex_autobackup_core::{
     CommandConvexExporter, CommandConvexImporter, CreateCloudTarget, CreateJobSchedule,
     CreateLocalDestination, CreateProject, CreateS3Destination, CreateScheduledJob, CreateUser,
     MissedRunPolicy, RestoreEngine, Result, ResultContext, RetentionPolicy, Role, Schedule,
-    SchedulerService, SecretKind, SecretVault, convex_runner_dir, error, generate_dr_report,
-    list_secret_metadata, npm_program, runner_status, verify_run,
+    SchedulerService, SecretKind, SecretVault, convex_runner_dir, crypto::decrypt_with_passphrase,
+    error, generate_dr_report, list_secret_metadata, npm_program, runner_status, verify_run,
 };
 use convex_autobackup_server::AppState;
 use serde::Serialize;
@@ -248,6 +248,7 @@ async fn main() -> Result<()> {
                     destination_id,
                     name,
                     include_file_storage,
+                    also_destination_id,
                     json,
                 } => {
                     let job = database.create_job(CreateScheduledJob {
@@ -256,6 +257,7 @@ async fn main() -> Result<()> {
                         destination_id,
                         name,
                         include_file_storage,
+                        additional_destination_ids: also_destination_id,
                     })?;
                     print_output(json, &serde_json::json!({ "job": job }))?;
                 }
@@ -306,6 +308,27 @@ async fn main() -> Result<()> {
                 }
             }
         }
+        Command::Decrypt {
+            input,
+            out,
+            passphrase_env,
+        } => {
+            let passphrase = match std::env::var(&passphrase_env) {
+                Ok(value) if !value.is_empty() => value,
+                _ => {
+                    eprintln!("Enter backup passphrase (input is not hidden), then press Enter:");
+                    let mut line = String::new();
+                    std::io::stdin().read_line(&mut line)?;
+                    line.trim_end_matches(['\r', '\n']).to_string()
+                }
+            };
+            let ciphertext = std::fs::read(&input)
+                .with_context(|| format!("failed to read {}", input.display()))?;
+            let plaintext = decrypt_with_passphrase(&ciphertext, &passphrase)?;
+            std::fs::write(&out, &plaintext)
+                .with_context(|| format!("failed to write {}", out.display()))?;
+            eprintln!("Decrypted {} bytes to {}", plaintext.len(), out.display());
+        }
         Command::Verify { run_id, json } => {
             let database = AppDatabase::open(&database_path)?;
             let result = verify_run(&database, run_id).await?;
@@ -322,7 +345,13 @@ async fn main() -> Result<()> {
             let restore = RestoreEngine::new(database);
             let importer = CommandConvexImporter::for_data_dir(&data_dir);
             let result = restore
-                .restore_run_to_target(run_id, target_id, &confirm_deployment, &confirm_phrase, &importer)
+                .restore_run_to_target(
+                    run_id,
+                    target_id,
+                    &confirm_deployment,
+                    &confirm_phrase,
+                    &importer,
+                )
                 .await?;
             print_output(json, &serde_json::json!({ "restore": result }))?;
         }
@@ -460,12 +489,29 @@ async fn run_doctor(
             detail: "CONVEX_AUTOBACKUP_MASTER_KEY is not set".to_string(),
         },
     });
-    let runner = runner_status(data_dir);
-    checks.push(DoctorCheck {
-        name: "managed_runner",
-        status: if runner.installed { "ok" } else { "error" },
-        detail: runner.convex_bin,
-    });
+    // An explicit CONVEX_AUTOBACKUP_CONVEX_BIN (e.g. baked into the Docker image)
+    // takes precedence over the managed runner in the data dir.
+    match std::env::var("CONVEX_AUTOBACKUP_CONVEX_BIN")
+        .ok()
+        .filter(|bin| !bin.is_empty())
+    {
+        Some(bin) => {
+            let usable = !bin.contains('/') || std::path::Path::new(&bin).is_file();
+            checks.push(DoctorCheck {
+                name: "managed_runner",
+                status: if usable { "ok" } else { "error" },
+                detail: format!("CONVEX_AUTOBACKUP_CONVEX_BIN={bin}"),
+            });
+        }
+        None => {
+            let runner = runner_status(data_dir);
+            checks.push(DoctorCheck {
+                name: "managed_runner",
+                status: if runner.installed { "ok" } else { "error" },
+                detail: runner.convex_bin,
+            });
+        }
+    }
     checks.push(DoctorCheck {
         name: "worker",
         status: "ok",

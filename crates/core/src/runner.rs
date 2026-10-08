@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 pub const CONVEX_CLI_PACKAGE: &str = "convex";
-pub const CONVEX_CLI_VERSION: &str = "1.30.0";
+pub const CONVEX_CLI_VERSION: &str = "1.46.0";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ManagedRunnerStatus {
@@ -68,7 +68,10 @@ pub fn ensure_runner_dir(data_dir: &Path) -> PathBuf {
                 "convex": "^1.18.0"
             }
         });
-        let _ = std::fs::write(&pkg_json, serde_json::to_string_pretty(&content).unwrap_or_default());
+        let _ = std::fs::write(
+            &pkg_json,
+            serde_json::to_string_pretty(&content).unwrap_or_default(),
+        );
     }
     runner_dir
 }

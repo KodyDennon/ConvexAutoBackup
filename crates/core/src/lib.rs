@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod backup;
 pub mod convex;
+pub mod crypto;
 pub mod db;
 pub mod dr;
 pub mod manifest;
@@ -17,12 +18,13 @@ pub mod verify;
 pub use auth::{ApiToken, ApiTokenMetadata, AuthService, CreateUser, Role, User};
 pub use backup::{BackupEngine, BackupRunResult};
 pub use convex::{
-    CommandConvexExporter, CommandConvexImporter, ConvexExporter, ConvexImporter, ConvexIoFuture,
-    ExportRequest, ImportRequest,
+    CommandConvexExporter, CommandConvexImporter, ConnectionCheck, ConvexExporter, ConvexImporter,
+    ConvexIoFuture, ExportRequest, ImportRequest,
 };
+pub use crypto::{ArchiveEncryption, MIN_PASSPHRASE_LEN};
 pub use db::{
     AppDatabase, AuditEvent, CreateCloudTarget, CreateLocalDestination, CreateProject,
-    CreateS3Destination, CreateScheduledJob, JobBundle, RunRecord,
+    CreateS3Destination, CreateScheduledJob, JobBundle, RunCopy, RunRecord,
 };
 pub use dr::{DrReadiness, DrReport, generate_dr_report};
 pub use firstparty_error::{Error, Result, ResultContext, error};

@@ -95,6 +95,7 @@ mod tests {
                 destination_id: destination.id,
                 name: "Manual".to_string(),
                 include_file_storage: true,
+                additional_destination_ids: Vec::new(),
             })
             .unwrap();
         let schedule = db
