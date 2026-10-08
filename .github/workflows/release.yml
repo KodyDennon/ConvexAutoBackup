@@ -194,7 +194,7 @@ jobs:
           cd release-artifacts
           sha256sum * > SHA256SUMS
       - name: Attest release artifacts
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: release-artifacts/*
       - name: Publish GitHub Release
