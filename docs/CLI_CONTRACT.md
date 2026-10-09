@@ -24,14 +24,15 @@ convex-autobackup
 - `runner`: install or inspect the pinned Convex CLI runner.
 - `user`: create users.
 - `token`: create API tokens.
-- `secret`: store and list encrypted secrets.
+- `secret`: store and list encrypted secrets (`--value` or `CONVEX_AUTOBACKUP_SECRET_VALUE`).
 - `project`: manage project records.
 - `target`: manage Convex targets.
 - `destination`: manage local and S3-compatible destinations.
-- `job`: manage backup jobs.
+- `job`: manage backup jobs (`--also-destination-id` adds extra destinations).
 - `schedule`: create/list schedules and run due jobs.
 - `backup`: trigger backup runs.
-- `verify`: verify backup archives and manifests.
+- `verify`: verify backup archives and manifests (decrypts encrypted copies to check the plaintext checksum).
+- `decrypt`: decrypt a `.zip.age` archive offline with the backup passphrase (`CONVEX_AUTOBACKUP_PASSPHRASE` or stdin); needs no database or master key.
 - `restore`: restore a verified backup to a confirmed target deployment.
 - `dr-report`: generate disaster recovery evidence from run history.
 - `audit`: inspect audit events.

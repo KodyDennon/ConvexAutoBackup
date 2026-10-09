@@ -51,7 +51,7 @@ The Convex runner executes the configured Convex command. Normal installs provis
 
 ## Implemented Storage
 
-Local filesystem storage and S3-compatible storage are implemented. Local writes use a staging file and atomic rename. S3-compatible writes use the Rust `object_store` S3 backend and upload both archive and manifest objects.
+Local filesystem storage and S3-compatible storage are implemented. Local writes use a staging file and atomic rename. S3-compatible storage uses a built-in SigV4 client (put, get, delete, ListObjectsV2) with path-style URLs, which works with AWS S3, Cloudflare R2 and MinIO. Archives can be age-encrypted per destination before they are written, and a job can write one export to several destinations (`job_destinations`, with per-copy results in `run_copies`).
 
 The storage contract requires:
 

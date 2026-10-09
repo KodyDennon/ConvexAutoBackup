@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/KodyDennon/ConvexAutoBackup/actions/workflows/ci.yml/badge.svg)](https://github.com/KodyDennon/ConvexAutoBackup/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/KodyDennon/ConvexAutoBackup?include_prereleases&label=release)](https://github.com/KodyDennon/ConvexAutoBackup/releases)
-[![crates.io](https://img.shields.io/badge/crates.io-v0.1.0--beta.2-orange)](https://crates.io/crates/convex-autobackup)
+[![crates.io](https://img.shields.io/badge/crates.io-v0.1.0--beta.7-orange)](https://crates.io/crates/convex-autobackup)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Hub%20%2B%20GHCR-2496ed)](https://hub.docker.com/r/kodydoty/convex-autobackup)
 [![Rust](https://img.shields.io/badge/Rust-core-b7410e)](Cargo.toml)
@@ -10,7 +10,15 @@
 
 ConvexAutoBackup is an open-source, self-hosted backup and disaster-recovery control plane for Convex projects.
 
-It is designed for developers, teams, agencies, and AI agents that need reliable full exports of Convex deployments on a schedule, with local filesystem or S3-compatible storage, clear restore workflows, and audit-friendly DR evidence.
+It is designed for developers, teams, agencies, and AI agents that need reliable full exports of Convex deployments on a schedule, encrypted with a passphrase, copied to local storage and offsite object storage (Cloudflare R2, AWS S3, MinIO, …), with clear restore workflows and audit-friendly DR evidence.
+
+Highlights:
+
+- **Setup wizard** — “Add project” walks through server checks, a live deploy-key test, storage, encryption, schedule and a verified first backup.
+- **Encrypted backups** — [age](https://age-encryption.org) passphrase encryption; archives are standard `.zip.age` files you can decrypt without this app.
+- **Local + offsite in one run** — one export is written to every destination of a job (for example a local folder and Cloudflare R2), each tracked and verified separately.
+- **Automatic retention** — keeps the newest N backups per destination, locally and in S3/R2.
+- **Guarded restore** — verifies and decrypts before import, and requires typing the deployment name and a confirmation phrase.
 
 ## What You Get
 
@@ -22,7 +30,7 @@ It is designed for developers, teams, agencies, and AI agents that need reliable
 | crates.io | Beta | Rust users who prefer `cargo install` |
 | Source checkout | Developer | Local development and contribution |
 
-Self-hosted only. There is no hosted SaaS. The default service binds to `0.0.0.0:8976` for LAN/server installs, so expose it to the public internet only behind HTTPS.
+Self-hosted only. There is no hosted SaaS. The native service binds to `0.0.0.0:8976` for LAN/server installs, so expose it to the public internet only behind HTTPS and an access gate. The bundled Docker Compose file publishes the app on host loopback only and can add a Cloudflare Tunnel (see [Deployment](docs/DEPLOYMENT.md)).
 
 ## Implemented Now
 
@@ -36,12 +44,16 @@ The current implementation includes:
 - Guarded restore engine that verifies the backup and requires exact deployment confirmation before invoking Convex import.
 - DR evidence report generation from persisted run history.
 - Audit log records for users, tokens, secrets, projects, targets, destinations, jobs, schedules, backup runs, and restore operations.
-- Local retention pruning by `keep_last`.
+- Retention pruning by `keep_last` for local folders and S3/R2 buckets, applied after each successful copy.
+- Passphrase encryption (age/scrypt) per destination, manifest schema v2 with encryption metadata and plaintext/stored checksums, and offline recovery with `convex-autobackup decrypt` or `age -d`.
+- Multi-destination jobs: one export, one encrypted copy per destination, per-copy status (`partial` when a copy fails).
+- Verify and restore from local or S3/R2 copies, with automatic fallback to the next readable copy.
+- Setup wizard API: read-only deploy key validation, install checks, and a server-provided Cloudflare R2 preset.
 - Supervised web service plus scheduler worker for persisted schedules.
 - Managed pinned Convex CLI runner provisioned by normal installers.
 - Tested auth, encrypted secrets, scheduling, manifest, path-safety, local storage, SQLite, backup, verification, restore, server health/auth, and worker policy logic.
 - React web console served by the Rust service for onboarding, login, setup, backup runs, verification, guarded restore, DR reports, audit review, user management, and API token management.
-- Dockerfile, Compose file, native install scripts, Windows MSI packaging, CI, release automation, Dependabot, Makefile, editor config, and environment example.
+- Hardened Dockerfile (non-root, read-only root filesystem, healthcheck, baked-in Convex CLI), Compose file with optional Cloudflare Tunnel sidecar, Cloudflare provisioning script, native install scripts, Windows MSI packaging, CI, release automation, Dependabot, Makefile, editor config, and environment example.
 - Full project documentation in `docs/`.
 - Public open-source metadata, issue templates, PR template, CODEOWNERS, security policy, and release checklist.
 
@@ -131,6 +143,7 @@ convex-autobackup job create \
   --project-id <project-id> \
   --target-id <target-id> \
   --destination-id <destination-id> \
+  --also-destination-id <offsite-destination-id> \
   --name "Manual full backup" \
   --json
 CONVEX_AUTOBACKUP_MASTER_KEY=<master> convex-autobackup backup run --job-id <job-id> --json
@@ -145,23 +158,36 @@ convex-autobackup dr-report --json
 convex-autobackup audit --json
 ```
 
-Deploy keys can be stored as encrypted secrets. Environment-variable references remain supported for local automation.
+Deploy keys can be stored as encrypted secrets (`secret put` also reads the value from `CONVEX_AUTOBACKUP_SECRET_VALUE`, keeping it out of process listings). Environment-variable references remain supported for local automation.
+
+Most people never need these commands: the web console's **Add project** wizard does all of the above, plus encryption and a schedule, and finishes with a verified backup.
+
+### Recovering without the app
+
+If the server is gone, download a `.zip.age` archive from your bucket and decrypt it with your passphrase:
+
+```bash
+age -d backup.zip.age > backup.zip
+# or
+CONVEX_AUTOBACKUP_PASSPHRASE='<passphrase>' convex-autobackup decrypt backup.zip.age --out backup.zip
+npx convex import --replace backup.zip   # into the deployment you choose
+```
 
 The HTTP bootstrap endpoint creates the first owner and returns a one-time bootstrap API token so headless setups can continue configuration through the API.
 
 ## Docker
 
 ```bash
-CONVEX_AUTOBACKUP_MASTER_KEY="$(openssl rand -base64 32)" docker compose up --build
+CONVEX_AUTOBACKUP_MASTER_KEY="$(openssl rand -base64 32)" docker compose up -d --build
 ```
 
-The service listens on:
+The service listens on host loopback:
 
 ```text
-http://localhost:8976
+http://127.0.0.1:8976
 ```
 
-Persist application data by mounting the `/data` volume. The container provisions the pinned Convex CLI runner inside `/data/runner` before the supervised service starts. Production deployments should run behind a reverse proxy with HTTPS.
+Application data lives in the `data` volume (`/data`). The image runs as a non-root user with a read-only root filesystem and ships the pinned Convex CLI. For remote access, add a Cloudflare Tunnel with `docker compose --profile tunnel up -d` and protect the hostname with Cloudflare Access; `scripts/cloudflare-provision.py` can create the tunnel, DNS record, Access app and an R2 bucket for you. Update with `scripts/docker-update.sh`. See [Deployment](docs/DEPLOYMENT.md).
 
 ## Repository Layout
 

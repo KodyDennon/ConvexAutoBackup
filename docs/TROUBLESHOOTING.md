@@ -83,6 +83,32 @@ convex-autobackup restore \
 
 Use the deployment name from the configured target.
 
+## Deploy Key Check Fails In The Wizard
+
+- `Invalid Convex deploy key`: copy the key again from Convex dashboard → Settings → Deploy keys; it looks like `prod:name-123|…`.
+- `timed out`: the server cannot reach `api.convex.dev`; check outbound network and DNS.
+- The wizard warns when the key is not a production key; that is allowed but only backs up that deployment.
+
+## Destination Test Or Upload Fails
+
+The error now includes the cause. Common ones:
+
+- `403`/`SignatureDoesNotMatch`: wrong access key or secret, or the token is not scoped to that bucket.
+- `NoSuchBucket`: bucket name or Cloudflare account ID is wrong (R2 endpoint is `https://<account-id>.r2.cloudflarestorage.com`, region `auto`).
+- Connection errors: the server cannot reach the endpoint.
+
+A run whose offsite copy failed is marked `partial`; the local copy is still valid. Fix the destination and use **Test** on its card.
+
+## Wrong Or Lost Backup Passphrase
+
+- Verification or restore failing with `wrong passphrase?` means the archive was written with a different passphrase than the one stored for it. Archives remember which stored passphrase they used, so this only happens if the app's secrets were replaced.
+- A lost passphrase cannot be recovered: encrypted archives are unreadable without it. Set a new passphrase so future backups are recoverable, and run a new backup immediately.
+
+## Remote URL Shows Cloudflare Login Or Errors
+
+- A Cloudflare Access login page is expected; sign in with an allowed email.
+- `502`/`1033`: the tunnel container is not connected. Check `docker logs convex-autobackup-tunnel` and that `TUNNEL_TOKEN` is set in the env file.
+
 ## Cargo Install Fails
 
 ```bash

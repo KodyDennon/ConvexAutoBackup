@@ -91,7 +91,7 @@ Keep evidence of:
 
 ## Retention
 
-Local destinations currently enforce `keep_last` after successful backup completion. Choose a retention value that covers delayed discovery of application bugs, accidental deletes, and operator error.
+Every destination (local folder or S3/R2 bucket) enforces `keep_last` after each successful backup, so old copies are cleaned up automatically. History length is `keep_last × schedule interval`; for example 28 backups every 6 hours keeps 7 days. Choose a value that covers delayed discovery of application bugs, accidental deletes, and operator error.
 
 Suggested starting points:
 
@@ -99,7 +99,21 @@ Suggested starting points:
 - Client projects: keep at least 7 successful backups.
 - Development: keep enough for your rollback window.
 
+## Recovering Without The App
+
+Keep the backup passphrase in a password manager. If the server is lost, download a `.zip.age` archive and decrypt it anywhere:
+
+```bash
+age -d backup.zip.age > backup.zip
+CONVEX_AUTOBACKUP_PASSPHRASE='<passphrase>' convex-autobackup decrypt backup.zip.age --out backup.zip
+```
+
+Then import it into the deployment you choose with `npx convex import --replace backup.zip`.
+
 ## Upgrade Procedure
+
+Docker Compose installs: run `scripts/docker-update.sh` (pulls, rebuilds, restarts; the `data` volume is kept). Otherwise:
+
 
 1. Record the currently running version.
 2. Back up the ConvexAutoBackup data directory.

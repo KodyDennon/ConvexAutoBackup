@@ -45,12 +45,13 @@
 - MCP tools for safe read/action workflows.
 - OpenAPI contract coverage.
 
-## Phase 5: Storage And Encryption
+## Phase 5: Storage And Encryption (done in 0.1.0-beta.7)
 
-- S3-compatible destination.
-- Per-destination encryption.
-- Checksum verification from destination.
+- S3-compatible destination, including Cloudflare R2.
+- Per-destination passphrase encryption (age).
+- Checksum verification from destination, including decryption.
 - Retention over object storage.
+- Multi-destination jobs (local + offsite from one export).
 
 ## Phase 6: DR And Compliance
 

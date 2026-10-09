@@ -113,15 +113,12 @@ cargo run -p convex-autobackup -- supervise
 
 1. Open `http://localhost:8976`.
 2. Create the first owner account.
-3. Store or reference a Convex deploy key.
-4. Create a project.
-5. Create a Convex Cloud target.
-6. Create a local or S3-compatible destination.
-7. Create a backup job.
-8. Run a manual backup.
-9. Verify the backup.
-10. Create a schedule after the first manual backup works.
+3. The **setup wizard** opens. It checks the install, then asks for a project name and a Convex deploy key (tested live, read-only), destinations (add a local folder and an offsite bucket), a backup passphrase, and a schedule.
+4. Click **Create everything**, then **Run first backup**. The wizard verifies the backup, including decryption.
+5. Save the backup passphrase in a password manager.
+
+Use **Add project** in the sidebar to protect more deployments. The Setup page still offers every resource individually for advanced configuration.
 
 ## Public Exposure
 
-The service defaults to `0.0.0.0:8976` for LAN/server installs. For production, put it behind HTTPS and firewall direct access to the app port.
+The native service defaults to `0.0.0.0:8976` for LAN/server installs. For production, put it behind HTTPS and an access gate, and firewall direct access to the app port. The Docker Compose file publishes the port on `127.0.0.1` only and supports a Cloudflare Tunnel plus Cloudflare Access (see [Deployment](DEPLOYMENT.md)).

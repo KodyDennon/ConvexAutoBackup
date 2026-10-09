@@ -26,7 +26,14 @@ The HTTP API is versioned under:
 - `POST /api/v1/targets/cloud`
 - `GET /api/v1/destinations`
 - `POST /api/v1/destinations/local`
-- `POST /api/v1/destinations/s3`
+- `POST /api/v1/destinations/s3` (accepts inline `access_key_id`/`secret_access_key` and `encryption_passphrase`)
+- `PUT /api/v1/destinations/{destination_id}/encryption` (set, change, or disable the passphrase)
+- `POST /api/v1/destinations/{destination_id}/test` (write, read and delete a probe object)
+- `POST /api/v1/targets/{target_id}/test` (read-only Convex connection check)
+- `POST /api/v1/setup/check-deploy-key` (validate a deploy key before saving it)
+- `GET /api/v1/setup/presets` (wizard defaults and pre-provisioned storage)
+- `POST /api/v1/setup/presets/r2` (create a destination from the pre-provisioned R2 bucket)
+- `GET /api/v1/system/checks` (install health for the setup wizard)
 - `GET /api/v1/jobs`
 - `POST /api/v1/jobs`
 - `GET /api/v1/schedules`
@@ -37,7 +44,7 @@ The HTTP API is versioned under:
 - `POST /api/v1/restore`
 - `GET /api/v1/dr/report`
 - `GET /api/v1/audit`
-- `GET /api/v1/runs`
+- `GET /api/v1/runs` (each run includes its per-destination `copies`)
 
 ## Future Resource Groups
 
@@ -50,7 +57,8 @@ Scoped token permissions, logs, settings, and Postgres administration are roadma
 ## Rules
 
 - API responses use JSON.
-- Secrets are returned only as redacted metadata and stable references.
+- Secrets are returned only as redacted metadata and stable references. Backup passphrases and S3 credentials are never returned.
+- The API does not send CORS headers; the web console is served from the same origin.
 - Mutating endpoints require CSRF/session protection for browser sessions or bearer tokens for agents.
 - OpenAPI must be generated or kept in sync with implemented routes.
 - New endpoint behavior requires tests covering success, auth failure, validation failure, and permission failure.
